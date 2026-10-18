@@ -23,7 +23,7 @@ def test_is_open_and_neighbors():
         assert maze.is_open(b, a)
         assert b in maze.neighbors(a)
         assert a in maze.neighbors(b)
-    
+
     # Out of bounds or walls
     assert not maze.is_open((-1, 0), (0, 0))
     assert not maze.is_open((0, 0), (10, 10))
@@ -74,16 +74,46 @@ def test_all_cells_reachable():
         visited = set()
         queue = [maze.start]
         visited.add(maze.start)
-        
+
         while queue:
             cell = queue.pop()
             for neighbor in maze.neighbors(cell):
                 if neighbor not in visited:
                     visited.add(neighbor)
                     queue.append(neighbor)
-        
+
         # All cells should be reachable
         assert len(visited) == maze.width * maze.height
+
+
+def test_items_collectible_before_exit():
+    # Test seeds: 20261019, 0, 1, 42
+    seeds = [20261019, 0, 1, 42]
+    for level in range(1, 8):
+        for seed in seeds:
+            maze = generate_level(level, seed)
+            visited = set()
+            queue = [maze.start]
+            visited.add(maze.start)
+
+            # Collect all items without visiting exit
+            while queue:
+                cell = queue.pop()
+                for neighbor in maze.neighbors(cell):
+                    if neighbor == maze.exit:
+                        continue  # Skip exit
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        queue.append(neighbor)
+
+            # Check that all items are in visited cells (not on start or exit)
+            for cell, _ in maze.items.items():
+                assert cell != maze.start, f"Item on start for level {level}, seed {seed}"
+                assert cell != maze.exit, f"Item on exit for level {level}, seed {seed}"
+                assert cell in visited, f"Item at {cell} not reachable without visiting exit for level {level}, seed {seed}"
+
+            # Ensure all 3 items are reachable
+            assert len(maze.items) == 3, f"Expected 3 items for level {level}, seed {seed}"
 
 def test_time_limit_growth():
     seed = 100

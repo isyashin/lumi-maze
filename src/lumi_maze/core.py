@@ -74,7 +74,7 @@ def generate_level(level: int, seed: int) -> Maze:
         for nx, nz in [(cx+1, cz), (cx-1, cz), (cx, cz+1), (cx, cz-1)]:
             if 0 <= nx < width and 0 <= nz < height and (nx, nz) not in visited_cells:
                 neighbors.append((nx, nz))
-        
+
         if neighbors:
             rng.shuffle(neighbors)
             nxt = neighbors[0]
@@ -96,7 +96,7 @@ def generate_level(level: int, seed: int) -> Maze:
     # We construct with empty items first
     # But wait, we need optimum path to calculate time limit.
     # Let's create a temporary helper or evaluate shortest path using passages.
-    
+
     # Use a temporary Maze instance to compute the shortest path
     temp_maze = Maze(
         width=width,
@@ -117,22 +117,40 @@ def generate_level(level: int, seed: int) -> Maze:
     base_time = 80.0 + 15.0 * (level - 1)
     optimum_time = optimum * 3.0 + 35.0
     time_limit = max(base_time, optimum_time)
-    
+
     # Ensure time_limit is at least 15 seconds more than the previous level for the same seed
     if level > 1:
         prev_time_limit = generate_level(level - 1, seed).time_limit
         time_limit = max(time_limit, prev_time_limit + 15.0)
 
     # Items: apple, strawberry, trampoline
-    # Ensure distinct cells, not start or exit.
-    all_cells = [(x, z) for x in range(width) for z in range(height) if (x, z) != start and (x, z) != exit_cell]
-    rng.shuffle(all_cells)
+    # Ensure distinct cells, not start or exit, and reachable from start without passing through exit.
+
+    # Find all cells reachable from start without passing through exit
+    def reachable_without_exit() -> set[Cell]:
+        from collections import deque
+        queue = deque([start])
+        visited = {start}
+        while queue:
+            curr = queue.popleft()
+            if curr == exit_cell:
+                continue  # Skip exit cell
+            for neighbor in temp_maze.neighbors(curr):
+                if neighbor not in visited and neighbor != exit_cell:
+                    visited.add(neighbor)
+                    queue.append(neighbor)
+        return visited
+
+    reachable_cells = reachable_without_exit()
+    candidate_cells = [cell for cell in reachable_cells if cell != start and cell != exit_cell]
+    candidate_cells.sort()  # Фиксированный порядок: x от 0 до width-1, внутри z от 0 до height-1
+    rng.shuffle(candidate_cells)
 
     item_types = ["apple", "strawberry", "trampoline"]
     items = {}
     for itype in item_types:
-        if all_cells:
-            cell = all_cells.pop()
+        if candidate_cells:
+            cell = candidate_cells.pop()
             items[cell] = itype
 
     return Maze(

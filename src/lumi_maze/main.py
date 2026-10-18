@@ -239,11 +239,11 @@ class Game(Entity):
         """Return camera to normal third-person follow."""
         # Better third-person pose: offset from cam_target, looking slightly down and ahead
         camera.position = (-3, 8, -7)
-        camera.rotation_z = 0
         # Look at point slightly below and ahead of cam_target (fox)
         # Since camera is parented to cam_target, look_at uses world coordinates
         if self.cam_target:
             camera.look_at(self.cam_target.position + Vec3(0, -1, 2))
+        camera.rotation_z = 0
         self.cam_overview_active = False
 
     def _start_overview(self) -> None:
@@ -264,11 +264,12 @@ class Game(Entity):
         fox_pos = self.fox.position
         target_pos = Vec3(fox_pos.x, CAM_LOOK_OFFSET_Y, fox_pos.z)
 
-        # Smooth follow
+        # Smooth follow (clamp interpolation factor to avoid overshoot)
+        smooth_factor = min(1.0, CAM_SMOOTH * dt)
         self.cam_target_pos = Vec3(
-            self.cam_target_pos.x + (target_pos.x - self.cam_target_pos.x) * CAM_SMOOTH * dt,
+            self.cam_target_pos.x + (target_pos.x - self.cam_target_pos.x) * smooth_factor,
             CAM_LOOK_OFFSET_Y,
-            self.cam_target_pos.z + (target_pos.z - self.cam_target_pos.z) * CAM_SMOOTH * dt
+            self.cam_target_pos.z + (target_pos.z - self.cam_target_pos.z) * smooth_factor
         )
         self.cam_target.position = self.cam_target_pos
 
@@ -330,9 +331,9 @@ class Game(Entity):
                     camera.position = self.cam_overview_start_pos
                     camera.rotation_x = self.cam_overview_start_rot.x
                     camera.rotation_y = self.cam_overview_start_rot.y
-                    camera.rotation_z = self.cam_overview_start_rot.z
                     # Re-establish look_at for normal follow
                     camera.look_at(self.cam_target.position + Vec3(0, -1, 2))
+                    camera.rotation_z = 0
             return
 
     # -----------------------------------------------------------------------
@@ -621,7 +622,7 @@ class Game(Entity):
             self.world_view.update(dt_visual)
 
         # Camera (visual)
-        self._update_camera(dt_visual)
+        self._update_camera(dt_logic if self.cam_overview_active else dt_visual)
 
         # Movement animation (visual)
         self._update_movement(dt_visual)

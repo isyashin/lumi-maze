@@ -31,7 +31,7 @@ class ItemNode:
 class WorldView:
     """
     एकल भूलभुलैया स्तर के लिए दृश्य प्रतिनिधित्व बनाता और प्रबंधित करता है।
-    
+
     स्वामित्व:
       - self.root: इस स्तर की सभी एंटिटीज के लिए पैरेंट
       - self.item_nodes: Cell -> ItemNode (आइटम और निकास बीकन के लिए)
@@ -42,7 +42,7 @@ class WorldView:
         self.root = Entity()
         self.item_nodes: Dict[Cell, ItemNode] = {}
         self._cleared = False
-        
+
         # निर्धारितिक सजावट के लिए स्थानीय RNG
         theme_id = self._theme_id(maze.theme)
         dim_hash = (maze.width * 1000 + maze.height) & 0xFFFFFFFF
@@ -53,6 +53,7 @@ class WorldView:
         self._wall_tex = texture_for(maze.theme, 'wall', seed=((theme_id << 16) ^ 0xA110) & 0xFFFFFFFF)
 
         # ज्यामिति निर्माण
+        self._build_background_plane()
         self._build_floor()
         self._build_walls()
         self._build_exit()
@@ -75,6 +76,32 @@ class WorldView:
     def _cell_center(self, cell: Cell) -> Tuple[float, float]:
         x, z = cell
         return (x * CELL_SIZE, z * CELL_SIZE)
+
+    def _build_background_plane(self) -> None:
+        """मेज़ के चारों ओर एक विस्तृत, रंगीन पृष्ठभूमि तल बनाता है।"""
+        # थीम के अनुसार रंग निर्धारित करें
+        theme_colors = {
+            'stone': color.rgb32(120, 200, 120),  # Meadow green
+            'forest': color.rgb32(100, 180, 100),  # Forest green
+            'cave': color.rgb32(180, 160, 220),  # Lavender
+            'streams': color.rgb32(100, 220, 220),  # Aqua
+        }
+        background_color = theme_colors.get(self.maze.theme, color.rgb32(150, 150, 150))
+
+        # मेज़ के आकार और 10 यूनिट विस्तार के आधार पर पृष्ठभूमि तल का आकार निर्धारित करें
+        maze_width = self.maze.width * CELL_SIZE
+        maze_height = self.maze.height * CELL_SIZE
+        plane_scale = (maze_width + 20, 1, maze_height + 20)
+        plane_position = ((self.maze.width - 1) * CELL_SIZE / 2, FLOOR_Y - 0.2, (self.maze.height - 1) * CELL_SIZE / 2)
+
+        # पृष्ठभूमि तल बनाएं
+        Entity(
+            parent=self.root,
+            model='plane',
+            scale=plane_scale,
+            position=plane_position,
+            color=background_color,
+        )
 
     def _build_floor(self) -> None:
         """प्रत्येक सेल के केंद्र पर एक फर्श तल बनाता है।"""
@@ -100,12 +127,12 @@ class WorldView:
         दीवारें ठीक एक बार दिखाई देती हैं और कभी भी खुले मार्ग को पार नहीं करतीं।
         """
         w, h = self.maze.width, self.maze.height
-        
+
         # आंतरिक दीवारें: पूर्व और उत्तर दिशाएं
         for x in range(w):
             for z in range(h):
                 cx, cz = self._cell_center((x, z))
-                
+
                 # पूर्वी दीवार (x+1 दिशा)
                 if x + 1 < w:
                     if not self.maze.is_open((x, z), (x + 1, z)):
@@ -113,7 +140,7 @@ class WorldView:
                             pos=(cx + CELL_SIZE / 2, WALL_HEIGHT / 2, cz),
                             scale=(WALL_THICKNESS, WALL_HEIGHT, CELL_SIZE),
                         )
-                
+
                 # उत्तरी दीवार (z+1 दिशा)
                 if z + 1 < h:
                     if not self.maze.is_open((x, z), (x, z + 1)):
@@ -121,7 +148,7 @@ class WorldView:
                             pos=(cx, WALL_HEIGHT / 2, cz + CELL_SIZE / 2),
                             scale=(CELL_SIZE, WALL_HEIGHT, WALL_THICKNESS),
                         )
-        
+
         # पश्चिमी सीमा (x = 0)
         for z in range(h):
             cx, cz = self._cell_center((0, z))
@@ -129,7 +156,7 @@ class WorldView:
                 pos=(cx - CELL_SIZE / 2, WALL_HEIGHT / 2, cz),
                 scale=(WALL_THICKNESS, WALL_HEIGHT, CELL_SIZE),
             )
-        
+
         # पूर्वी सीमा (x = w-1)
         for z in range(h):
             cx, cz = self._cell_center((w - 1, z))
@@ -137,7 +164,7 @@ class WorldView:
                 pos=(cx + CELL_SIZE / 2, WALL_HEIGHT / 2, cz),
                 scale=(WALL_THICKNESS, WALL_HEIGHT, CELL_SIZE),
             )
-        
+
         # दक्षिणी सीमा (z = 0)
         for x in range(w):
             cx, cz = self._cell_center((x, 0))
@@ -145,7 +172,7 @@ class WorldView:
                 pos=(cx, WALL_HEIGHT / 2, cz - CELL_SIZE / 2),
                 scale=(CELL_SIZE, WALL_HEIGHT, WALL_THICKNESS),
             )
-        
+
         # उत्तरी सीमा (z = h-1)
         for x in range(w):
             cx, cz = self._cell_center((x, h - 1))
@@ -172,10 +199,10 @@ class WorldView:
         """
         ex, ez = self.maze.exit
         cx, cz = self._cell_center(self.maze.exit)
-        
+
         # बीकन रूट (एनिमेशन के लिए)
         beacon_root = Entity(parent=self.root, position=(cx, 0, cz))
-        
+
         # चमकदार गोला (बीकन)
         beacon = Entity(
             parent=beacon_root,
@@ -185,16 +212,16 @@ class WorldView:
             color=color.rgb32(255, 220, 80),
             shader='unlit_shader',
         )
-        
+
         # आर्च फ्रेम: दो ऊर्ध्वाधर स्तंभ + शीर्ष बीम
         # स्तंभ गलियारे के किनारों पर, मार्ग के बाहर
         arch_color = color.rgb32(255, 230, 120)
         column_h = 2.0
         column_r = 0.15
-        
+
         # निकास की खुली दिशा निर्धारित करें ताकि गलियारे को अवरुद्ध न करें
         exit_neighbors = self.maze.neighbors(self.maze.exit)
-        
+
         # स्तंभों को खुली दिशा के लंबवत रखें
         if exit_neighbors:
             nx, nz = exit_neighbors[0]
@@ -203,7 +230,7 @@ class WorldView:
             px, pz = -dz * 0.7, dx * 0.7
         else:
             px, pz = 0.7, 0
-        
+
         # बायां स्तंभ
         Entity(
             parent=beacon_root,
@@ -233,7 +260,7 @@ class WorldView:
         if exit_neighbors:
             angle = math.degrees(math.atan2(dx, dz))
             beam.rotation_y = angle
-        
+
         self.item_nodes[self.maze.exit] = ItemNode(
             root=beacon_root,
             item_type='exit',
@@ -246,14 +273,14 @@ class WorldView:
         for cell, item_type in self.maze.items.items():
             cx, cz = self._cell_center(cell)
             item_root = Entity(parent=self.root, position=(cx, 0, cz))
-            
+
             if item_type == 'apple':
                 self._build_apple(item_root)
             elif item_type == 'strawberry':
                 self._build_strawberry(item_root)
             elif item_type == 'trampoline':
                 self._build_trampoline(item_root)
-            
+
             self.item_nodes[cell] = ItemNode(
                 root=item_root,
                 item_type=item_type,
@@ -377,17 +404,17 @@ class WorldView:
         - forest: पेड़/फूल
         - cave: क्रिस्टल
         - streams: पानी के ताल/कंकड़
-        
+
         कॉरिडोर के बाहर या कोनों के पास छोटे; 19x19 प्रदर्शन के लिए कैप्ड काउंट।
         """
         w, h = self.maze.width, self.maze.height
         max_decor = min(40, (w * h) // 8)  # 19x19 पर ~45 पर कैप
         placed = 0
-        
+
         # प्रत्येक सेल के लिए डेकोरेशन रखने का प्रयास करें (यादृच्छिक क्रम में)
         cells = [(x, z) for x in range(w) for z in range(h)]
         self._rng.shuffle(cells)
-        
+
         for cell in cells:
             if placed >= max_decor:
                 break
@@ -395,17 +422,17 @@ class WorldView:
                 continue
             if cell in self.maze.items:
                 continue
-            
+
             # खुले मार्ग के केंद्र में न रखें — कोनों/किनारों को प्राथमिकता दें
             cx, cz = self._cell_center(cell)
-            
+
             # कोने का ऑफसेट चुनें
             corner_choices = [
                 (-0.9, -0.9), (0.9, -0.9), (-0.9, 0.9), (0.9, 0.9),  # कोने
                 (-1.1, 0), (1.1, 0), (0, -1.1), (0, 1.1),              # किनारे मध्य
             ]
             self._rng.shuffle(corner_choices)
-            
+
             for ox, oz in corner_choices:
                 wx, wz = cx + ox, cz + oz
                 # बाउंड्स जांचें
@@ -413,7 +440,7 @@ class WorldView:
                     continue
                 if not (-CELL_SIZE/2 < wz < h*CELL_SIZE - CELL_SIZE/2):
                     continue
-                
+
                 # इस कोने के पास खुला मार्ग न होने पर डेकोरेशन रखें
                 if self._can_place_decor_at(cell, (ox, oz)):
                     self._create_theme_decor(wx, wz)
@@ -427,7 +454,7 @@ class WorldView:
         """
         x, z = cell
         ox, oz = offset
-        
+
         # ऑफसेट से सापेक्ष दिशा निर्धारित करें
         dirs = []
         if ox < -0.5:
@@ -438,7 +465,7 @@ class WorldView:
             dirs.append((0, -1))  # दक्षिण
         if oz > 0.5:
             dirs.append((0, 1))   # उत्तर
-        
+
         # अगर इनमें से कोई दिशा खुली है, तो यह एक गलियारा किनारा है — रखने के लिए ठीक है
         # लेकिन अगर दो विपरीत दिशाएं खुली हैं (सीधा गलियारा), तो केंद्र से बचें
         # सरलीकृत: कोनों पर रखने की अनुमति दें, बस सटीक सेल केंद्र से बचें
@@ -448,7 +475,7 @@ class WorldView:
         """वर्ल्ड निर्देशांक (wx, wz) पर थीम-विशिष्ट डेकोरेशन बनाता है।"""
         theme = self.maze.theme
         y_base = FLOOR_Y + 0.05
-        
+
         if theme == 'stone':
             self._decor_stone(wx, wz, y_base)
         elif theme == 'forest':
@@ -461,7 +488,7 @@ class WorldView:
     def _decor_stone(self, wx: float, wz: float, y: float) -> None:
         """पत्थर थीम: मॉस वाले खंडहर, खड़े पत्थर, टूटे स्तंभ।"""
         decor_type = self._rng.choice(['moss_patch', 'standing_stone', 'broken_column', 'rubble'])
-        
+
         if decor_type == 'moss_patch':
             # मॉस के साथ चपटा बोल्डर
             Entity(
@@ -515,7 +542,7 @@ class WorldView:
     def _decor_forest(self, wx: float, wz: float, y: float) -> None:
         """वन थीम: पेड़ (त्रंक + फोलीज), फूल झाड़ियाँ।"""
         decor_type = self._rng.choice(['tree', 'flower_bush', 'small_plant'])
-        
+
         if decor_type == 'tree':
             # त्रंक
             h = self._rng.uniform(1.4, 2.0)
@@ -573,7 +600,7 @@ class WorldView:
     def _decor_cave(self, wx: float, wz: float, y: float) -> None:
         """गुफा थीम: क्रिस्टल संरचनाएं, स्टैलेक्टाइट्स/स्टैलेग्माइट्स।"""
         decor_type = self._rng.choice(['crystal_cluster', 'stalagmite', 'crystal_spire'])
-        
+
         if decor_type == 'crystal_cluster':
             # क्रिस्टल क्लस्टर (पिरामिड आकार के क्यूब्स)
             for _ in range(self._rng.randint(3, 6)):
@@ -624,7 +651,7 @@ class WorldView:
     def _decor_streams(self, wx: float, wz: float, y: float) -> None:
         """धारा थीम: पानी के ताल, कंकड़, छोटे झरने।"""
         decor_type = self._rng.choice(['water_pool', 'pebbles', 'reeds'])
-        
+
         if decor_type == 'water_pool':
             # छोटा पानी का ताल
             r = self._rng.uniform(0.5, 0.9)
@@ -686,12 +713,12 @@ class WorldView:
             root = node.root
             if not root or not root.enabled:
                 continue
-            
+
             # बॉब एनिमेशन (साइन लहर)
             node.bob_offset += dt * 2.0
             bob_y = math.sin(node.bob_offset) * 0.12
             root.y = bob_y
-            
+
             # घुमाव (निकास के लिए धीमा, आइटम के लिए तेज़)
             if node.item_type == 'exit':
                 root.rotation_y += dt * node.rotation_speed * 0.3
