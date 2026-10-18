@@ -14,7 +14,7 @@ from .core import Maze, Cell
 from .textures import texture_for
 
 CELL_SIZE = 3.0
-WALL_HEIGHT = 1.6
+WALL_HEIGHT = 1.1
 WALL_THICKNESS = 0.25
 FLOOR_Y = -0.12
 

@@ -17,7 +17,7 @@ class Fox(Entity):
     """
     A cute procedural fox avatar.
 
-    The fox is built from Ursina primitives (cubes, spheres, cones) as child entities.
+    The fox is built from Ursina primitives (spheres, cones, cylinders) as child entities.
     Animation state is driven by update_animation(dt) and controlled via
     set_walking(active, heading) and jump().
 
@@ -25,11 +25,12 @@ class Fox(Entity):
     Heading is in degrees, applied to rotation_y.
     """
 
-    # Colours
+    # Colours - warm orange/cream/dark palette
     ORANGE: Final = color.rgb32(255, 140, 0)
     CREAM: Final = color.rgb32(255, 235, 200)
     DARK: Final = color.rgb32(40, 30, 25)
     NOSE_BLACK: Final = color.rgb32(20, 20, 20)
+    PAW_DARK: Final = color.rgb32(60, 45, 35)
 
     # Animation timing constants
     WALK_CYCLE_SPEED: Final = 8.0  # radians per second
@@ -42,158 +43,163 @@ class Fox(Entity):
         super().__init__(**kwargs)
 
         # --- Build body parts as child entities ---
+        # All dimensions tuned to fit in a 3x3 cell (3 units wide/deep) centered at root
+        # Height ~1.5 to clear 1.0-high walls for third-person camera
 
-        # Torso (main body)
+        # Torso (main body) - rounded ellipsoid using sphere with non-uniform scale
         self.torso = Entity(
             parent=self,
-            model='cube',
+            model='sphere',
             color=self.ORANGE,
-            scale=(1.2, 1.0, 1.6),
-            position=(0, 0.7, 0),
+            scale=(1.0, 0.75, 1.3),  # width, height, depth
+            position=(0, 0.65, 0),
             origin=(0, 0, 0),
         )
 
-        # Belly (cream patch on torso front)
+        # Belly (cream patch on torso front) - slightly flattened sphere
         self.belly = Entity(
             parent=self.torso,
-            model='cube',
+            model='sphere',
             color=self.CREAM,
-            scale=(0.9, 0.6, 0.08),
-            position=(0, -0.2, 0.72),
+            scale=(0.75, 0.5, 0.12),
+            position=(0, -0.15, 0.65),
             origin=(0, 0, 0),
         )
 
-        # Neck (connects torso to head)
+        # Neck (connects torso to head) - short cylinder/ellipsoid
         self.neck = Entity(
             parent=self.torso,
-            model='cube',
+            model='sphere',
             color=self.ORANGE,
-            scale=(0.6, 0.5, 0.6),
-            position=(0, 0.65, 0.5),
+            scale=(0.5, 0.4, 0.5),
+            position=(0, 0.5, 0.45),
             origin=(0, 0, 0),
         )
 
-        # Head (large, cute)
+        # Head (large, cute) - sphere scaled to ellipsoid
         self.head = Entity(
             parent=self.neck,
-            model='cube',
+            model='sphere',
             color=self.ORANGE,
-            scale=(1.2, 1.1, 1.1),
-            position=(0, 0.7, 0.1),
+            scale=(1.0, 0.9, 0.95),
+            position=(0, 0.55, 0.1),
             origin=(0, 0, 0),
         )
 
-        # Muzzle (cream front of face)
+        # Muzzle (cream front of face) - flattened sphere
         self.muzzle = Entity(
             parent=self.head,
-            model='cube',
+            model='sphere',
             color=self.CREAM,
-            scale=(0.7, 0.5, 0.15),
-            position=(0, -0.15, 0.68),
+            scale=(0.6, 0.45, 0.18),
+            position=(0, -0.1, 0.55),
             origin=(0, 0, 0),
         )
 
-        # Nose (dark, on muzzle)
+        # Nose (dark, on muzzle) - small sphere
         self.nose = Entity(
             parent=self.muzzle,
             model='sphere',
             color=self.NOSE_BLACK,
-            scale=(0.18, 0.12, 0.12),
-            position=(0, -0.05, 0.12),
+            scale=(0.15, 0.1, 0.1),
+            position=(0, -0.02, 0.14),
             origin=(0, 0, 0),
         )
 
-        # Eyes (dark, expressive)
+        # Eyes (dark, expressive) - small spheres, slightly forward
         self.eye_left = Entity(
             parent=self.head,
             model='sphere',
             color=self.DARK,
-            scale=(0.14, 0.16, 0.14),
-            position=(-0.3, 0.15, 0.58),
+            scale=(0.12, 0.14, 0.12),
+            position=(-0.25, 0.12, 0.5),
             origin=(0, 0, 0),
         )
         self.eye_right = Entity(
             parent=self.head,
             model='sphere',
             color=self.DARK,
-            scale=(0.14, 0.16, 0.14),
-            position=(0.3, 0.15, 0.58),
+            scale=(0.12, 0.14, 0.12),
+            position=(0.25, 0.12, 0.5),
             origin=(0, 0, 0),
         )
 
-        # Ears (pointed cubes to mimic cones)
+        # Ears (pointy cubes - using Ursina's cube primitive)
         self.ear_left = Entity(
             parent=self.head,
             model='cube',
             color=self.ORANGE,
-            scale=(0.1, 0.55, 0.1),
-            position=(-0.45, 0.55, -0.1),
-            rotation=(20, 0, -15),
-            origin=(0, 0, 0),
+            scale=(0.08, 0.45, 0.08),
+            position=(-0.35, 0.42, -0.05),
+            rotation=(15, 0, -12),
+            origin=(0, -0.5, 0),  # pivot at base
         )
         self.ear_right = Entity(
             parent=self.head,
             model='cube',
             color=self.ORANGE,
-            scale=(0.1, 0.55, 0.1),
-            position=(0.45, 0.55, -0.1),
-            rotation=(20, 0, 15),
-            origin=(0, 0, 0),
+            scale=(0.08, 0.45, 0.08),
+            position=(0.35, 0.42, -0.05),
+            rotation=(15, 0, 12),
+            origin=(0, -0.5, 0),
         )
 
-        # Ear inner cream tips (cubes to mimic cones)
+        # Ear inner cream tips (smaller cubes)
         self.ear_tip_left = Entity(
             parent=self.ear_left,
             model='cube',
             color=self.CREAM,
-            scale=(0.2, 0.5, 0.2),
-            position=(0, 0.1, 0),
+            scale=(0.15, 0.15, 0.15),
+            position=(0, 0.15, 0),
             rotation=(0, 0, 0),
-            origin=(0, 0, 0),
+            origin=(0, -0.5, 0),
         )
         self.ear_tip_right = Entity(
             parent=self.ear_right,
             model='cube',
             color=self.CREAM,
-            scale=(0.2, 0.5, 0.2),
-            position=(0, 0.1, 0),
+            scale=(0.15, 0.15, 0.15),
+            position=(0, 0.15, 0),
             rotation=(0, 0, 0),
-            origin=(0, 0, 0),
+            origin=(0, -0.5, 0),
         )
 
         # Four legs (distinct, with upper/lower segments for walk animation)
+        # Using spheres for rounded legs
         self.legs: list[dict[str, Entity]] = []
         leg_positions = [
-            (-0.45, -0.5, 0.5),   # front left
-            (0.45, -0.5, 0.5),    # front right
-            (-0.45, -0.5, -0.5),  # rear left
-            (0.45, -0.5, -0.5),   # rear right
+            (-0.38, -0.45, 0.45),   # front left
+            (0.38, -0.45, 0.45),    # front right
+            (-0.38, -0.45, -0.4),   # rear left
+            (0.38, -0.45, -0.4),    # rear right
         ]
         for i, (lx, ly, lz) in enumerate(leg_positions):
             is_front = i < 2
             upper = Entity(
                 parent=self.torso,
-                model='cube',
+                model='sphere',
                 color=self.ORANGE,
-                scale=(0.22, 0.55, 0.22),
-                position=(lx, ly + 0.2, lz),
-                origin=(0, 0.5, 0),
+                scale=(0.16, 0.4, 0.16),
+                position=(lx, ly + 0.15, lz),
+                origin=(0, 0, 0),
+                rotation=(0, 0, 0),
             )
             lower = Entity(
                 parent=upper,
-                model='cube',
+                model='sphere',
                 color=self.ORANGE,
-                scale=(0.9, 1.1, 0.9),
-                position=(0, -0.55, 0),
-                origin=(0, 0.5, 0),
+                scale=(0.2, 0.4, 0.2),  # relative to upper
+                position=(0, -0.4, 0),
+                origin=(0, 0, 0),
+                rotation=(0, 0, 0),
             )
-            # Paw (slightly darker)
+            # Paw (slightly darker, flattened sphere)
             paw = Entity(
                 parent=lower,
-                model='cube',
-                color=self.DARK,
-                scale=(1.1, 0.15, 1.1),
-                position=(0, -0.6, 0),
+                model='sphere',
+                color=self.PAW_DARK,
+                scale=(0.2, 0.08, 0.2),
+                position=(0, -0.35, 0.05),
                 origin=(0, 0.5, 0),
             )
             self.legs.append({
@@ -204,39 +210,40 @@ class Fox(Entity):
                 'side': -1 if i % 2 == 0 else 1,  # left = -1, right = 1
             })
 
-        # Tail (fluffy, multi-segment for expressive sway)
+        # Tail (fluffy, multi-segment for expressive sway) - using spheres/cones
+        # Shortened to fit in 3x3 cell: total tail length ~1.2 units
         self.tail_segments: list[Entity] = []
         tail_base = Entity(
             parent=self.torso,
-            model='cube',
+            model='sphere',
             color=self.ORANGE,
-            scale=(0.35, 0.35, 0.6),
-            position=(0, 0.15, -0.9),
+            scale=(0.3, 0.3, 0.45),
+            position=(0, 0.1, -0.75),
             origin=(0, 0, 0.5),
-            rotation=(20, 0, 0),
+            rotation=(15, 0, 0),
         )
         self.tail_segments.append(tail_base)
 
-        # Additional tail segments for fluffiness
-        for seg_idx in range(1, 4):
+        # Additional tail segments (progressively smaller, last is cream)
+        for seg_idx in range(1, 3):
             seg = Entity(
                 parent=self.tail_segments[-1],
-                model='cube',
-                color=self.ORANGE if seg_idx < 3 else self.CREAM,  # cream tip
-                scale=(0.85, 0.85, 1.0),
-                position=(0, 0.05, -0.55),
+                model='sphere',
+                color=self.ORANGE if seg_idx < 2 else self.CREAM,
+                scale=(0.8, 0.8, 0.85),
+                position=(0, 0.05, -0.38),
                 origin=(0, 0, 0.5),
-                rotation=(-5 * seg_idx, 0, 0),
+                rotation=(-8 * seg_idx, 0, 0),
             )
             self.tail_segments.append(seg)
 
-        # Tail tip (cream, slightly larger for fluff)
+        # Tail tip (cream, fluffy sphere)
         self.tail_tip = Entity(
             parent=self.tail_segments[-1],
             model='sphere',
             color=self.CREAM,
-            scale=(0.5, 0.55, 0.5),
-            position=(0, 0.1, -0.4),
+            scale=(0.45, 0.5, 0.45),
+            position=(0, 0.08, -0.3),
             origin=(0, 0, 0),
         )
 

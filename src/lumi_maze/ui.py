@@ -60,6 +60,17 @@ class GameUI:
         # Clean any existing UI
         self.clear()
 
+        # Centered card behind menu contents
+        menu_card = Entity(
+            model='quad',
+            parent=camera.ui,
+            position=(0, 0),
+            scale=(0.85, 0.85),
+            color=color.rgba(0, 0, 0.35, 0.85),
+            collider=None,
+        )
+        self.menu_entities.append(menu_card)
+
         # Title
         title = Text(
             "Луми и Лабиринты",
@@ -112,6 +123,15 @@ class GameUI:
         if not self.hud_entities:
             # Clear any leftover menu, result or pause UI before first HUD creation
             self.clear()
+            # Top strip behind HUD text rows
+            self.hud_entities['strip'] = Entity(
+                model='quad',
+                parent=camera.ui,
+                position=(0, 0.36),
+                scale=(1.2, 0.2),
+                color=color.rgba(0, 0, 0.35, 0.85),
+                collider=None,
+            )
             # Level / mode
             self.hud_entities['level'] = Text(
                 parent=camera.ui,
@@ -183,6 +203,17 @@ class GameUI:
         Callbacks receive no arguments.
         """
         self.clear()
+        # Centered card behind result contents
+        result_card = Entity(
+            model='quad',
+            parent=camera.ui,
+            position=(0, 0),
+            scale=(0.85, 0.85),
+            color=color.rgba(0, 0, 0.35, 0.85),
+            collider=None,
+        )
+        self.result_entities.append(result_card)
+
         # Main result text
         result_text = "Победа в кампании!" if (won and final) else ("Победа!" if won else "Поражение")
         title = Text(
