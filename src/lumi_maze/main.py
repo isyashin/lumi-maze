@@ -237,20 +237,21 @@ class Game(Entity):
     # -----------------------------------------------------------------------
     def _reset_camera(self) -> None:
         """Return camera to normal third-person follow."""
-        camera.position = (0, CAM_HEIGHT, -CAM_DISTANCE)
-        camera.rotation_x = 20
-        camera.rotation_y = 0
+        # Better third-person pose: offset from cam_target, looking slightly down and ahead
+        camera.position = (-3, 8, -7)
         camera.rotation_z = 0
+        # Look at point slightly below and ahead of cam_target (fox)
+        # Since camera is parented to cam_target, look_at uses world coordinates
+        if self.cam_target:
+            camera.look_at(self.cam_target.position + Vec3(0, -1, 2))
         self.cam_overview_active = False
 
     def _start_overview(self) -> None:
-        """Start trampoline overview: lift camera high overhead."""
+        """Start trampoline overview: lift camera high overhead from current pose."""
         self.cam_overview_active = True
         self.cam_overview_timer = 0.0
         self.cam_overview_phase = 0
-        # Store current camera offset for smooth return
-        self.cam_prev_distance = -camera.position.z
-        self.cam_prev_height = camera.position.y
+        # Store complete current local camera pose for smooth return
         self.cam_overview_start_pos = Vec3(camera.position)
         self.cam_overview_start_rot = Vec3(camera.rotation_x, camera.rotation_y, camera.rotation_z)
 
@@ -259,61 +260,7 @@ class Game(Entity):
         if not self.fox or not self.run_state:
             return
 
-        if self.cam_overview_active:
-            self.cam_overview_timer += dt
-
-            # Calculate overview height based on maze size
-            maze_size = max(self.maze.width, self.maze.height) if self.maze else 10
-            overview_height = max(OVERVIEW_DURATION * 5, maze_size * CELL_SIZE * 0.6)
-
-            if self.cam_overview_phase == 0:  # Rise quickly
-                rise_duration = OVERVIEW_RISE_TIME
-                t = min(self.cam_overview_timer / rise_duration, 1.0)
-                eased = t * t * (3 - 2 * t)
-
-                camera.position = Vec3(
-                    0,
-                    self.cam_prev_height + (overview_height - self.cam_prev_height) * eased,
-                    0
-                )
-                camera.rotation_x = 20 + (90 - 20) * eased
-
-                if t >= 1.0:
-                    self.cam_overview_phase = 1
-                    self.cam_overview_timer = 0.0
-
-            elif self.cam_overview_phase == 1:  # Hold high
-                hold_duration = OVERVIEW_HOLD_TIME
-                camera.position = Vec3(0, overview_height, 0)
-                camera.rotation_x = 90
-
-                if self.cam_overview_timer >= hold_duration:
-                    self.cam_overview_phase = 2
-                    self.cam_overview_timer = 0.0
-
-            elif self.cam_overview_phase == 2:  # Return smoothly
-                return_duration = OVERVIEW_DURATION - OVERVIEW_RISE_TIME - OVERVIEW_HOLD_TIME
-                t = min(self.cam_overview_timer / return_duration, 1.0)
-                eased = t * t * (3 - 2 * t)
-
-                target_y = self.cam_prev_height
-                target_dist = self.cam_prev_distance
-                target_rot_x = 20
-
-                camera.position = Vec3(
-                    0,
-                    overview_height + (target_y - overview_height) * eased,
-                    -(target_dist * (1 - eased))
-                )
-                camera.rotation_x = 90 + (target_rot_x - 90) * eased
-
-                if t >= 1.0:
-                    self.cam_overview_active = False
-                    self._reset_camera()
-            return
-
-        # Normal follow: cam_target smoothly follows fox horizontally,
-        # camera stays at fixed offset from cam_target
+        # Always update cam_target to follow fox horizontally (even during overview)
         fox_pos = self.fox.position
         target_pos = Vec3(fox_pos.x, CAM_LOOK_OFFSET_Y, fox_pos.z)
 
@@ -324,6 +271,69 @@ class Game(Entity):
             self.cam_target_pos.z + (target_pos.z - self.cam_target_pos.z) * CAM_SMOOTH * dt
         )
         self.cam_target.position = self.cam_target_pos
+
+        if self.cam_overview_active:
+            self.cam_overview_timer += dt
+
+            # Calculate overview height based on maze size (sufficient for 19x19)
+            maze_size = max(self.maze.width, self.maze.height) if self.maze else 10
+            overview_height = max(maze_size * CELL_SIZE * 0.7, 40.0)
+
+            if self.cam_overview_phase == 0:  # Rise smoothly from stored pose
+                rise_duration = OVERVIEW_RISE_TIME
+                t = min(self.cam_overview_timer / rise_duration, 1.0)
+                eased = t * t * (3 - 2 * t)
+
+                # Interpolate from stored local pose to overhead pose
+                # Overhead: position (0, overview_height, 0), rotation (90, 0, 0) in local space
+                camera.position = Vec3(
+                    self.cam_overview_start_pos.x + (0 - self.cam_overview_start_pos.x) * eased,
+                    self.cam_overview_start_pos.y + (overview_height - self.cam_overview_start_pos.y) * eased,
+                    self.cam_overview_start_pos.z + (0 - self.cam_overview_start_pos.z) * eased
+                )
+                camera.rotation_x = self.cam_overview_start_rot.x + (90 - self.cam_overview_start_rot.x) * eased
+                camera.rotation_y = self.cam_overview_start_rot.y * (1 - eased)
+                camera.rotation_z = self.cam_overview_start_rot.z * (1 - eased)
+
+                if t >= 1.0:
+                    self.cam_overview_phase = 1
+                    self.cam_overview_timer = 0.0
+
+            elif self.cam_overview_phase == 1:  # Hold high
+                hold_duration = OVERVIEW_HOLD_TIME
+                camera.position = Vec3(0, overview_height, 0)
+                camera.rotation_x = 90
+                camera.rotation_y = 0
+                camera.rotation_z = 0
+
+                if self.cam_overview_timer >= hold_duration:
+                    self.cam_overview_phase = 2
+                    self.cam_overview_timer = 0.0
+
+            elif self.cam_overview_phase == 2:  # Return smoothly to stored pose
+                return_duration = OVERVIEW_DURATION - OVERVIEW_RISE_TIME - OVERVIEW_HOLD_TIME
+                t = min(self.cam_overview_timer / return_duration, 1.0)
+                eased = t * t * (3 - 2 * t)
+
+                camera.position = Vec3(
+                    0 + (self.cam_overview_start_pos.x - 0) * eased,
+                    overview_height + (self.cam_overview_start_pos.y - overview_height) * eased,
+                    0 + (self.cam_overview_start_pos.z - 0) * eased
+                )
+                camera.rotation_x = 90 + (self.cam_overview_start_rot.x - 90) * eased
+                camera.rotation_y = 0 + (self.cam_overview_start_rot.y - 0) * eased
+                camera.rotation_z = 0 + (self.cam_overview_start_rot.z - 0) * eased
+
+                if t >= 1.0:
+                    self.cam_overview_active = False
+                    # Restore exact stored pose
+                    camera.position = self.cam_overview_start_pos
+                    camera.rotation_x = self.cam_overview_start_rot.x
+                    camera.rotation_y = self.cam_overview_start_rot.y
+                    camera.rotation_z = self.cam_overview_start_rot.z
+                    # Re-establish look_at for normal follow
+                    camera.look_at(self.cam_target.position + Vec3(0, -1, 2))
+            return
 
     # -----------------------------------------------------------------------
     # Movement & Input
@@ -638,6 +648,9 @@ def run_smoke(output_path: str) -> int:
         except Exception:
             pass
 
+    # Track success of THIS run only
+    smoke_success = False
+
     # Create app with offscreen rendering
     app = Ursina(
         title='Lumi Maze Smoke',
@@ -661,6 +674,7 @@ def run_smoke(output_path: str) -> int:
     game._update_hud()
 
     def delayed_screenshot():
+        nonlocal smoke_success
         try:
             # Force a render
             app.graphicsEngine.render_frame()
@@ -675,6 +689,7 @@ def run_smoke(output_path: str) -> int:
                 target_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(temp_path), str(target_path))
                 print(f"Screenshot saved to {output_path}")
+                smoke_success = True
                 application.quit()
                 return
             else:
@@ -689,8 +704,8 @@ def run_smoke(output_path: str) -> int:
 
     app.run()
 
-    # Return 0 only if THIS run freshly saved a nonempty PNG
-    if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+    # Return 0 only if THIS run successfully saved a nonempty PNG
+    if smoke_success:
         return 0
     return 1
 

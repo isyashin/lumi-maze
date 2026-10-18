@@ -128,7 +128,7 @@ class GameUI:
                 model='quad',
                 parent=camera.ui,
                 position=(0, 0.36),
-                scale=(1.2, 0.2),
+                scale=(1.5, 0.2),
                 color=color.rgba(0, 0, 0.35, 0.85),
                 collider=None,
             )
@@ -136,24 +136,24 @@ class GameUI:
             self.hud_entities['level'] = Text(
                 parent=camera.ui,
                 origin=(0,0),
-                position=(-0.58, 0.42),
-                scale=0.7,
+                position=(-0.50, 0.42),
+                scale=0.85,
                 color=color.yellow,
             )
             # Time left
             self.hud_entities['time'] = Text(
                 parent=camera.ui,
                 origin=(0,0),
-                position=(0.58, 0.42),
-                scale=0.7,
+                position=(0.50, 0.42),
+                scale=0.85,
                 color=color.cyan,
             )
             # Score
             self.hud_entities['score'] = Text(
                 parent=camera.ui,
                 origin=(0,0),
-                position=(-0.58, 0.3),
-                scale=0.7,
+                position=(-0.50, 0.3),
+                scale=0.85,
                 color=color.lime,
             )
             # Freeze left
@@ -168,8 +168,8 @@ class GameUI:
             self.hud_entities['speed'] = Text(
                 parent=camera.ui,
                 origin=(0,0),
-                position=(0.58, 0.3),
-                scale=0.7,
+                position=(0.50, 0.3),
+                scale=0.85,
                 color=color.orange,
             )
             # Hint line at bottom

@@ -217,10 +217,10 @@ class Fox(Entity):
             parent=self.torso,
             model='sphere',
             color=self.ORANGE,
-            scale=(0.3, 0.3, 0.45),
-            position=(0, 0.1, -0.75),
+            scale=(0.4, 0.4, 0.65),
+            position=(0, 0.55, -0.52),
             origin=(0, 0, 0.5),
-            rotation=(15, 0, 0),
+            rotation=(10, 0, 0),
         )
         self.tail_segments.append(tail_base)
 
@@ -230,8 +230,8 @@ class Fox(Entity):
                 parent=self.tail_segments[-1],
                 model='sphere',
                 color=self.ORANGE if seg_idx < 2 else self.CREAM,
-                scale=(0.8, 0.8, 0.85),
-                position=(0, 0.05, -0.38),
+                scale=(0.9, 0.9, 0.95),
+                position=(0, 0.05, -0.24),
                 origin=(0, 0, 0.5),
                 rotation=(-8 * seg_idx, 0, 0),
             )
@@ -242,8 +242,8 @@ class Fox(Entity):
             parent=self.tail_segments[-1],
             model='sphere',
             color=self.CREAM,
-            scale=(0.45, 0.5, 0.45),
-            position=(0, 0.08, -0.3),
+            scale=(0.6, 0.65, 0.6),
+            position=(0, 0.08, -0.2),
             origin=(0, 0, 0),
         )
 
