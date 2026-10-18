@@ -315,6 +315,12 @@ class Fox(Entity):
                 self._jump_active = False
                 self._jump_phase = 0.0
                 self._jump_timer = 0.0
+                # Transition immediately to idle or walk; skip jump transform this frame
+                if self._walk_active:
+                    self._apply_walk_transform()
+                else:
+                    self._apply_idle_transform()
+                return
 
             # Jump curve: quick up, slower down (parabolic ease)
             # phase 0..0.4 = rising, 0.4..1.0 = falling
@@ -346,6 +352,10 @@ class Fox(Entity):
         # Reset torso scale and rotation after jump
         self.torso.scale = self._base_torso_scale
         self.torso.rotation_x = 0.0
+
+        # Reset neck/head rotation after jump
+        self.neck.rotation_x = 0.0
+        self.head.rotation_x = 0.0
 
         # Breathing: torso scales slightly, head bobs gently
         breath = math.sin(self._idle_time * self.BREATH_SPEED) * 0.02
@@ -382,6 +392,10 @@ class Fox(Entity):
 
     def _apply_walk_transform(self) -> None:
         """Apply walk cycle: leg movement, torso bob, head bob, tail bounce."""
+        # Start from base scale after jump
+        self.torso.scale = self._base_torso_scale
+        self.tail_tip.scale = self._base_tail_tip_scale
+
         phase = self._walk_phase
 
         # Torso bob (up-down and slight pitch)
