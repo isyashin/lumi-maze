@@ -26,10 +26,10 @@ class Fox(Entity):
     """
 
     # Colours
-    ORANGE: Final = color.rgb(255, 140, 0)
-    CREAM: Final = color.rgb(255, 235, 200)
-    DARK: Final = color.rgb(40, 30, 25)
-    NOSE_BLACK: Final = color.rgb(20, 20, 20)
+    ORANGE: Final = color.rgb32(255, 140, 0)
+    CREAM: Final = color.rgb32(255, 235, 200)
+    DARK: Final = color.rgb32(40, 30, 25)
+    NOSE_BLACK: Final = color.rgb32(20, 20, 20)
 
     # Animation timing constants
     WALK_CYCLE_SPEED: Final = 8.0  # radians per second
