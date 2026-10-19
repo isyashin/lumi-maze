@@ -12,6 +12,7 @@ from ursina import Entity, color, destroy
 
 from .core import Maze, Cell
 from .textures import texture_for
+from .scenery import populate_scenery, place_small_prop, place_food_prop
 
 CELL_SIZE = 3.0
 WALL_HEIGHT = 1.1
@@ -59,6 +60,7 @@ class WorldView:
         self._build_exit()
         self._build_items()
         self._build_decorations()
+        self._scenery_nodes = populate_scenery(self.root, maze, CELL_SIZE, (theme_id << 24) ^ dim_hash)
 
     # ------------------------------------------------------------------ #
     # निर्माण सहायक
@@ -81,10 +83,10 @@ class WorldView:
         """मेज़ के चारों ओर एक विस्तृत, रंगीन पृष्ठभूमि तल बनाता है।"""
         # थीम के अनुसार रंग निर्धारित करें
         theme_colors = {
-            'stone': color.rgb32(120, 200, 120),  # Meadow green
-            'forest': color.rgb32(100, 180, 100),  # Forest green
-            'cave': color.rgb32(180, 160, 220),  # Lavender
-            'streams': color.rgb32(100, 220, 220),  # Aqua
+            'stone': color.rgb32(144, 170, 125),
+            'forest': color.rgb32(108, 150, 110),
+            'cave': color.rgb32(108, 108, 126),
+            'streams': color.rgb32(120, 162, 178),
         }
         background_color = theme_colors.get(self.maze.theme, color.rgb32(150, 150, 150))
 
@@ -98,6 +100,7 @@ class WorldView:
         Entity(
             parent=self.root,
             model='plane',
+            shader='unlit_shader',
             scale=plane_scale,
             position=plane_position,
             color=background_color,
@@ -111,6 +114,7 @@ class WorldView:
                 Entity(
                     parent=self.root,
                     model='plane',
+                    shader='unlit_shader',
                     scale=(CELL_SIZE, 1, CELL_SIZE),
                     position=(cx, FLOOR_Y, cz),
                     texture=self._floor_tex,
@@ -189,7 +193,8 @@ class WorldView:
             scale=scale,
             position=pos,
             texture=self._wall_tex,
-            color=color.white,
+            texture_scale=(0.4, 0.4),
+            color=color.rgb32(190, 186, 178),
         )
 
     def _build_exit(self) -> None:
@@ -289,76 +294,10 @@ class WorldView:
             )
 
     def _build_apple(self, root: Entity) -> None:
-        """लाल गोल सेब बनाता है जिसमें तना और पत्ता होता है।"""
-        # मुख्य शरीर
-        Entity(
-            parent=root,
-            model='sphere',
-            scale=0.55,
-            position=(0, 0.6, 0),
-            color=color.rgb32(220, 30, 30),
-        )
-        # तना
-        Entity(
-            parent=root,
-            model='cube',
-            scale=(0.06, 0.25, 0.06),
-            position=(0, 1.05, 0),
-            color=color.rgb32(80, 50, 20),
-        )
-        # पत्ता
-        Entity(
-            parent=root,
-            model='plane',
-            scale=(0.25, 0.15, 0.02),
-            position=(0.08, 1.1, 0.02),
-            rotation=(0, 0, -30),
-            color=color.rgb32(50, 160, 50),
-            double_sided=True,
-        )
+        place_food_prop(root, 'apple')
 
     def _build_strawberry(self, root: Entity) -> None:
-        """हरे पत्तों के साथ लाल स्ट्रॉबेरी (शंक्वाकार) बनाता है।"""
-        # मुख्य शरीर (क्यूब्स के साथ शंकु का अनुमान)
-        segments = 5
-        base_r = 0.45
-        height = 0.85
-        for i in range(segments):
-            t = (i + 0.5) / segments
-            r = base_r * (1 - t) + 0.05 * t
-            y = 0.4 + t * height
-            Entity(
-                parent=root,
-                model='sphere',
-                scale=(r * 2, (height / segments) * 1.1, r * 2),
-                position=(0, y, 0),
-                color=color.rgb32(220, 40, 60),
-            )
-        # बीज (छोटे पीले डॉट्स)
-        for _ in range(12):
-            ang = self._rng.random() * math.tau
-            h = self._rng.uniform(0.5, 1.1)
-            r = self._rng.uniform(0.15, 0.4)
-            Entity(
-                parent=root,
-                model='sphere',
-                scale=0.06,
-                position=(math.sin(ang) * r, h, math.cos(ang) * r),
-                color=color.rgb32(255, 230, 80),
-            )
-        # पत्ते (शीर्ष पर हरा ताज)
-        leaf_count = 5
-        for i in range(leaf_count):
-            ang = i / leaf_count * math.tau
-            leaf = Entity(
-                parent=root,
-                model='plane',
-                scale=(0.18, 0.35, 0.02),
-                position=(math.sin(ang) * 0.25, 1.25, math.cos(ang) * 0.25),
-                rotation=(0, math.degrees(ang), -25),
-                color=color.rgb32(40, 180, 60),
-                double_sided=True,
-            )
+        place_food_prop(root, 'strawberry')
 
     def _build_trampoline(self, root: Entity) -> None:
         """चमकीले स्प्रिंग पैड के रूप में ट्रैम्पोलिन बनाता है।"""
@@ -408,7 +347,7 @@ class WorldView:
         कॉरिडोर के बाहर या कोनों के पास छोटे; 19x19 प्रदर्शन के लिए कैप्ड काउंट।
         """
         w, h = self.maze.width, self.maze.height
-        max_decor = min(40, (w * h) // 8)  # 19x19 पर ~45 पर कैप
+        max_decor = min(64, (w * h) // 3)
         placed = 0
 
         # प्रत्येक सेल के लिए डेकोरेशन रखने का प्रयास करें (यादृच्छिक क्रम में)
@@ -429,7 +368,6 @@ class WorldView:
             # कोने का ऑफसेट चुनें
             corner_choices = [
                 (-0.9, -0.9), (0.9, -0.9), (-0.9, 0.9), (0.9, 0.9),  # कोने
-                (-1.1, 0), (1.1, 0), (0, -1.1), (0, 1.1),              # किनारे मध्य
             ]
             self._rng.shuffle(corner_choices)
 
@@ -472,18 +410,8 @@ class WorldView:
         return True  # कोने ऑफसेट पहले से ही केंद्र से बाहर हैं
 
     def _create_theme_decor(self, wx: float, wz: float) -> None:
-        """वर्ल्ड निर्देशांक (wx, wz) पर थीम-विशिष्ट डेकोरेशन बनाता है।"""
-        theme = self.maze.theme
-        y_base = FLOOR_Y + 0.05
-
-        if theme == 'stone':
-            self._decor_stone(wx, wz, y_base)
-        elif theme == 'forest':
-            self._decor_forest(wx, wz, y_base)
-        elif theme == 'cave':
-            self._decor_cave(wx, wz, y_base)
-        elif theme == 'streams':
-            self._decor_streams(wx, wz, y_base)
+        """Place licensed scene art away from the walking line."""
+        place_small_prop(self.root, self.maze.theme, wx, FLOOR_Y + 0.02, wz, self._rng)
 
     def _decor_stone(self, wx: float, wz: float, y: float) -> None:
         """पत्थर थीम: मॉस वाले खंडहर, खड़े पत्थर, टूटे स्तंभ।"""

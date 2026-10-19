@@ -19,7 +19,7 @@ from ursina import (
 
 from .core import generate_level, Maze, Cell
 from .rules import RunState
-from .avatar import Fox
+from .avatar import Fox, prepare_avatar_rendering
 from .world import WorldView, CELL_SIZE
 from .ui import GameUI
 
@@ -42,8 +42,8 @@ OVERVIEW_RISE_TIME = 0.5
 OVERVIEW_HOLD_TIME = 1.5
 
 # Movement animation
-MOVE_DURATION = 0.18  # seconds per cell
-MOVE_REPEAT_DELAY = 0.18  # repeat move after this delay when key held
+MOVE_DURATION = 0.26  # one visible gallop stride per cell
+MOVE_REPEAT_DELAY = 0.26  # repeat move after this delay when key held
 
 # Heading mapping: (dx, dz) -> degrees (0 = +Z, 90 = +X)
 HEADING_MAP = {
@@ -109,23 +109,24 @@ class Game(Entity):
 
     def _setup_scene(self) -> None:
         """Create sky, lights, and camera parent."""
+        prepare_avatar_rendering()
         # Cheerful sky
         Sky(color=color.rgb32(180, 220, 255))
 
         # Sun light
         DirectionalLight(
-            color=color.rgb32(255, 245, 220),
+            color=color.rgb32(170, 165, 155),
             shadows=False,
             rotation=(45, -45, 0)
         )
         # Ambient fill
-        AmbientLight(color=color.rgb32(120, 130, 140))
+        AmbientLight(color=color.rgb32(72, 78, 86))
 
         # Camera follows cam_target
         camera.parent = self.cam_target
         camera.position = (0, CAM_HEIGHT, -CAM_DISTANCE)
         camera.rotation_x = 20
-        camera.fov = 70
+        camera.fov = 65
 
     def input(self, key: str) -> None:
         """Handle key press events via Ursina's entity input system."""
@@ -238,11 +239,11 @@ class Game(Entity):
     def _reset_camera(self) -> None:
         """Return camera to normal third-person follow."""
         # Better third-person pose: offset from cam_target, looking slightly down and ahead
-        camera.position = (-3, 8, -7)
+        camera.position = (-4.5, 3.8, -4.5)
         # Look at point slightly below and ahead of cam_target (fox)
         # Since camera is parented to cam_target, look_at uses world coordinates
         if self.cam_target:
-            camera.look_at(self.cam_target.position + Vec3(0, -1, 2))
+            camera.look_at(self.cam_target.position + Vec3(1, 0, 1))
         camera.rotation_z = 0
         self.cam_overview_active = False
 
@@ -332,7 +333,7 @@ class Game(Entity):
                     camera.rotation_x = self.cam_overview_start_rot.x
                     camera.rotation_y = self.cam_overview_start_rot.y
                     # Re-establish look_at for normal follow
-                    camera.look_at(self.cam_target.position + Vec3(0, -1, 2))
+                    camera.look_at(self.cam_target.position + Vec3(1, 0, 1))
                     camera.rotation_z = 0
             return
 
@@ -418,7 +419,7 @@ class Game(Entity):
         self._update_hud()
 
     def _on_item_collected(self, cell: Cell, item: str) -> None:
-        """Handle item collection: remove from world, show hint."""
+        """Handle item collection: remove from world, show hint, and celebrate pickup."""
         if self.world_view:
             self.world_view.remove_item(cell)
 
@@ -430,6 +431,27 @@ class Game(Entity):
         }
         self.last_hint = hints.get(item, '')
         self.hint_timer = 3.0  # show for 3 seconds
+
+        if item in ('apple', 'strawberry') and self.fox:
+            self.fox.celebrate_pickup()
+            if self.world_view:
+                tint = color.rgb32(255, 190, 65) if item == 'apple' else color.rgb32(255, 90, 140)
+                center = Vec3(cell[0] * CELL_SIZE, 0.65, cell[1] * CELL_SIZE)
+                for i in range(5):
+                    angle = i * math.tau / 5
+                    particle = Entity(
+                        parent=self.world_view.root,
+                        model='sphere',
+                        color=tint,
+                        scale=0.15,
+                        position=center,
+                    )
+                    particle.animate_position(
+                        center + Vec3(math.cos(angle) * 0.6, 0.6, math.sin(angle) * 0.6),
+                        duration=0.65,
+                    )
+                    particle.animate_scale(0, duration=0.65)
+                    invoke(destroy, particle, delay=0.7)
 
         if item == 'trampoline':
             if self.fox:
@@ -495,6 +517,17 @@ class Game(Entity):
         def on_menu():
             self.result_showing = False
             self.return_to_menu()
+
+        won_level = self.current_level
+        won_run = self.run_state
+        def delayed_next():
+            if (self.result_showing and self.current_level == won_level
+                    and self.run_state is won_run and won_run.status == 'won'):
+                self.next_level()
+
+        # Auto-advance for levels 1-6 after 1.8 seconds
+        if not final:
+            invoke(delayed_next, delay=1.8)
 
         self.ui.show_result(
             won=True,

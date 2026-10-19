@@ -1,5 +1,14 @@
+param(
+    [ValidatePattern('^[A-Za-z0-9_-]+$')][string]$OutputDir = 'dist',
+    [switch]$Console
+)
+
 $scriptDir = Split-Path -Path $MyInvocation.MyCommand.Path -Parent
 $projectDir = $scriptDir
+$distRoot = [IO.Path]::GetFullPath((Join-Path $projectDir $OutputDir))
+if (-not $distRoot.StartsWith($projectDir + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'OutputDir must resolve inside the project'
+}
 
 Push-Location -Path $projectDir
 try {
@@ -16,7 +25,7 @@ try {
 
     $requirementsBuildPath = Join-Path -Path $projectDir -ChildPath 'requirements-build.txt'
 
-    & $venvPython -c "import ursina, PIL, PyInstaller, pytest"
+    & $venvPython -c "import ursina, PIL, gltf, simplepbr, PyInstaller, pytest"
     $importExit = $LASTEXITCODE
     if ($importExit -ne 0) {
         & $venvPython -m pip install -r $requirementsBuildPath
@@ -30,13 +39,19 @@ try {
     $pyinstallerArgs = @(
         '--noconfirm',
         '--onedir',
-        '--windowed',
         '--name', 'LumiMaze',
+        '--distpath', $distRoot,
         '--paths', 'src',
+        '--add-data', 'src/lumi_maze/assets;lumi_maze/assets',
         '--collect-all', 'ursina',
         '--collect-all', 'panda3d',
+        '--collect-all', 'gltf',
+        '--collect-all', 'simplepbr',
         $runGamePath
     )
+
+    if ($Console) { $pyinstallerArgs += '--console' }
+    else { $pyinstallerArgs += '--windowed' }
 
     & $venvPython -m PyInstaller $pyinstallerArgs
     if ($LASTEXITCODE -ne 0) {
@@ -44,7 +59,7 @@ try {
         exit $LASTEXITCODE
     }
 
-    $exePath = Join-Path -Path $projectDir -ChildPath 'dist\LumiMaze\LumiMaze.exe'
+    $exePath = Join-Path -Path $distRoot -ChildPath 'LumiMaze\LumiMaze.exe'
     if (Test-Path -Path $exePath) {
         $absPath = (Resolve-Path -Path $exePath).Path
         Write-Output "Build successful. Executable path: $absPath"
