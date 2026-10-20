@@ -1,0 +1,20 @@
+{
+  "models": [
+    "Stylized Nature MegaKit[Standard]/glTF/Bush_Common.gltf",
+    "Stylized Nature MegaKit[Standard]/glTF/Bush_Common_Flowers.gltf",
+    "Stylized Nature MegaKit[Standard]/glTF/CommonTree_1.gltf",
+    "Stylized Nature MegaKit[Standard]/glTF/CommonTree_2.gltf",
+    "Stylized Nature MegaKit[Standard]/glTF/Fern_1.gltf",
+    "Stylized Nature MegaKit[Standard]/glTF/Flower_3_Group.gltf",
+    "Stylized Nature MegaKit[Standard]/glTF/Flower_4_Group.gltf",
+    "Stylized Nature MegaKit[Standard]/glTF/Grass_Wispy_Short.gltf",
+    "Stylized Nature MegaKit[Standard]/glTF/Mushroom_Common.gltf",
+    "Stylized Nature MegaKit[Standard]/glTF/Pine_1.gltf",
+    "Stylized Nature MegaKit[Standard]/glTF/Rock_Medium_1.gltf",
+    "Stylized Nature MegaKit[Standard]/glTF/Rock_Medium_2.gltf"
+  ],
+  "source": "https://quaternius.itch.io/stylized-nature-megakit",
+  "revision": "db3df04d1e4714298a09510b26fb6de6645138a2",
+  "downloaded": "2026-10-20",
+  "mirror": "https://github.com/agentkaerf/FreeModels"
+}
