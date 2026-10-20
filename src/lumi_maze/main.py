@@ -42,8 +42,16 @@ OVERVIEW_RISE_TIME = 0.5
 OVERVIEW_HOLD_TIME = 1.5
 
 # Movement animation
-MOVE_DURATION = 0.26  # one visible gallop stride per cell
-MOVE_REPEAT_DELAY = 0.26  # repeat move after this delay when key held
+MOVE_DURATION = 0.36  # constant-speed travel across one cell
+ARRIVAL_LOCK_DURATION = 0.65  # short fruit-eating pause before the next move
+
+# Per-theme scene colours: (sky, sun, ambient) as RGB tuples.
+THEME_LIGHTING = {
+    'stone': ((75, 165, 230), (255, 236, 198), (105, 111, 119)),
+    'forest': ((76, 159, 202), (255, 240, 206), (101, 119, 95)),
+    'cave': ((35, 48, 78), (151, 175, 228), (84, 88, 119)),
+    'streams': ((73, 174, 225), (237, 246, 229), (88, 117, 126)),
+}
 
 # Heading mapping: (dx, dz) -> degrees (0 = +Z, 90 = +X)
 HEADING_MAP = {
@@ -76,6 +84,9 @@ class Game(Entity):
         self.world_view: Optional[WorldView] = None
         self.run_state: Optional[RunState] = None
         self.fox: Optional[Fox] = None
+        self.sky = None
+        self.sun = None
+        self.ambient = None
 
         # Camera
         self.cam_target = Entity()  # follows fox smoothly
@@ -94,8 +105,10 @@ class Game(Entity):
         self.move_from = Vec3(0, 0, 0)
         self.move_to = Vec3(0, 0, 0)
         self.move_target_cell: Optional[Cell] = None
-        self.move_repeat_timer = 0.0
         self.last_move_dir: Optional[tuple[int, int]] = None
+        # Item collected by try_move, shown/removed only when the fox arrives.
+        self.pending_item: Optional[tuple[Cell, str]] = None
+        self.arrival_lock_timer = 0.0
 
         # Input handling
         self.paused = False
@@ -110,23 +123,28 @@ class Game(Entity):
     def _setup_scene(self) -> None:
         """Create sky, lights, and camera parent."""
         prepare_avatar_rendering()
-        # Cheerful sky
-        Sky(color=color.rgb32(180, 220, 255))
+        # Cheerful storybook sky (recoloured per theme on level load)
+        self.sky = Sky(color=color.rgb32(75, 165, 230))
 
-        # Sun light
-        DirectionalLight(
-            color=color.rgb32(170, 165, 155),
-            shadows=False,
-            rotation=(45, -45, 0)
+        # Warm sun with real shadows.  The color argument of DirectionalLight
+        # is swallowed in this Ursina version, so assign it afterwards.
+        self.sun = DirectionalLight(
+            shadows=True,
+            rotation=(52, -38, 0),
+            shadow_map_resolution=Vec2(2048, 2048),
         )
-        # Ambient fill
-        AmbientLight(color=color.rgb32(72, 78, 86))
+        self.sun.color = color.rgb32(255, 236, 198)
+        # Light defaults overwrite the constructor rotation, so set it again.
+        self.sun.rotation = (42, -35, 0)
+        # Soft cool-blue ambient fill keeps the fox readable in shade.
+        self.ambient = AmbientLight(color=color.rgb32(98, 112, 132))
 
         # Camera follows cam_target
         camera.parent = self.cam_target
-        camera.position = (0, CAM_HEIGHT, -CAM_DISTANCE)
-        camera.rotation_x = 20
-        camera.fov = 65
+        camera.position = (-4.8, 2.2, -5.4)
+        camera.look_at(self.cam_target.position)
+        camera.rotation_z = 0
+        camera.fov = 68
 
     def input(self, key: str) -> None:
         """Handle key press events via Ursina's entity input system."""
@@ -146,7 +164,7 @@ class Game(Entity):
         self.last_hint = ''
         self.hint_timer = 0.0
         self._result_handled = False
-        self.move_active = False
+        self._reset_movement_state()
         self.cam_overview_active = False
         self._load_level(self.current_level)
 
@@ -161,7 +179,7 @@ class Game(Entity):
             self.last_hint = ''
             self.hint_timer = 0.0
             self._result_handled = False
-            self.move_active = False
+            self._reset_movement_state()
             self.cam_overview_active = False
             self._load_level(self.current_level)
 
@@ -174,7 +192,7 @@ class Game(Entity):
             self.last_hint = ''
             self.hint_timer = 0.0
             self._result_handled = False
-            self.move_active = False
+            self._reset_movement_state()
             self.cam_overview_active = False
             self._load_level(self.current_level)
         else:
@@ -192,7 +210,7 @@ class Game(Entity):
         self.last_hint = ''
         self.hint_timer = 0.0
         self._result_handled = False
-        self.move_active = False
+        self._reset_movement_state()
         self.cam_overview_active = False
         self.ui.show_menu(lambda m: self.start_new_campaign(m))
 
@@ -210,12 +228,38 @@ class Game(Entity):
         start_pos = Vec3(start_x * CELL_SIZE, 0, start_z * CELL_SIZE)
         self.fox = Fox(position=start_pos)
 
+        # Recolour the existing sky and lights for this location.  No new
+        # lights are created, so retries do not accumulate them.
+        sky_rgb, sun_rgb, ambient_rgb = THEME_LIGHTING.get(
+            self.maze.theme, THEME_LIGHTING['stone']
+        )
+        if self.sky:
+            self.sky.color = color.rgb32(*sky_rgb)
+        if self.sun:
+            self.sun.color = color.rgb32(*sun_rgb)
+        if self.ambient:
+            self.ambient.color = color.rgb32(*ambient_rgb)
+
+        # Fit shadow bounds to the freshly generated geometry on every reload.
+        if self.sun and self.world_view:
+            self.sun.update_bounds(self.world_view.root)
+
         # Camera target starts at fox
         self.cam_target.position = start_pos + Vec3(0, CAM_LOOK_OFFSET_Y, 0)
         self.cam_target_pos = Vec3(self.cam_target.position)
 
         # Reset camera to normal view
         self._reset_camera()
+
+        # Settle the new world's cutaway before the first frame is drawn.
+        # WallBatch clamps dt to 0.1 and CUTAWAY_TIME is 0.15, so two calls
+        # converge immediately; later frames keep animating smoothly.
+        self.world_view.update_visibility(
+            camera.world_position, self.fox.world_position, 0.1
+        )
+        self.world_view.update_visibility(
+            camera.world_position, self.fox.world_position, 0.1
+        )
 
         # Show HUD
         self._update_hud()
@@ -230,8 +274,17 @@ class Game(Entity):
             self.fox = None
         self.run_state = None
         self.maze = None
-        self.move_active = False
+        self._reset_movement_state()
         self.cam_overview_active = False
+
+    def _reset_movement_state(self) -> None:
+        """Cancel interpolation and any pickup that has not arrived yet."""
+        self.move_active = False
+        self.move_timer = 0.0
+        self.move_target_cell = None
+        self.last_move_dir = None
+        self.pending_item = None
+        self.arrival_lock_timer = 0.0
 
     # -----------------------------------------------------------------------
     # Camera
@@ -239,12 +292,12 @@ class Game(Entity):
     def _reset_camera(self) -> None:
         """Return camera to normal third-person follow."""
         # Better third-person pose: offset from cam_target, looking slightly down and ahead
-        camera.position = (-4.5, 3.8, -4.5)
-        # Look at point slightly below and ahead of cam_target (fox)
+        camera.position = (-4.8, 2.2, -5.4)
         # Since camera is parented to cam_target, look_at uses world coordinates
         if self.cam_target:
-            camera.look_at(self.cam_target.position + Vec3(1, 0, 1))
+            camera.look_at(self.cam_target.position)
         camera.rotation_z = 0
+        camera.fov = 68
         self.cam_overview_active = False
 
     def _start_overview(self) -> None:
@@ -273,6 +326,11 @@ class Game(Entity):
             self.cam_target_pos.z + (target_pos.z - self.cam_target_pos.z) * smooth_factor
         )
         self.cam_target.position = self.cam_target_pos
+
+        if self.world_view:
+            self.world_view.update_visibility(
+                camera.world_position, self.fox.world_position, dt
+            )
 
         if self.cam_overview_active:
             self.cam_overview_timer += dt
@@ -333,7 +391,7 @@ class Game(Entity):
                     camera.rotation_x = self.cam_overview_start_rot.x
                     camera.rotation_y = self.cam_overview_start_rot.y
                     # Re-establish look_at for normal follow
-                    camera.look_at(self.cam_target.position + Vec3(1, 0, 1))
+                    camera.look_at(self.cam_target.position)
                     camera.rotation_z = 0
             return
 
@@ -383,40 +441,47 @@ class Game(Entity):
             return (-1, 0)
         return None
 
-    def _try_start_move(self, dir_vec: tuple[int, int]) -> None:
-        """Attempt to start a move to adjacent cell."""
-        if self.move_active or not self.run_state or not self.fox:
-            return
+    def _held_move_dir(self) -> Optional[tuple[int, int]]:
+        """Return the first movement direction currently held, if any."""
+        for key in ('w', 'up arrow', 's', 'down arrow',
+                    'd', 'right arrow', 'a', 'left arrow'):
+            if held_keys.get(key, 0):
+                return self._key_to_dir(key)
+        return None
+
+    def _try_start_move(self, dir_vec: tuple[int, int]) -> bool:
+        """Attempt to start a move to an adjacent cell."""
+        if (self.move_active or self.arrival_lock_timer > 0
+                or not self.run_state or not self.fox):
+            return False
 
         cx, cz = self.run_state.cell
         dx, dz = dir_vec
         target = (cx + dx, cz + dz)
 
-        # Try move in rules (checks walls, adjacency, game state)
+        # One validated rules transition per cell.
         collected_item = self.run_state.try_move(target)
-        if collected_item is None and self.run_state.cell == (cx, cz):
-            # Move rejected (wall or not playing)
-            return
+        if self.run_state.cell != target:
+            # Move rejected (wall or not playing); no extra steps.
+            return False
 
-        # Move accepted - start animation
+        # Move accepted - start constant-speed animation.
         self.move_active = True
         self.move_timer = 0.0
         self.move_from = Vec3(self.fox.position)
         self.move_to = Vec3(target[0] * CELL_SIZE, 0, target[1] * CELL_SIZE)
         self.move_target_cell = target
         self.last_move_dir = dir_vec
-        self.move_repeat_timer = MOVE_REPEAT_DELAY
+        # Keep the world item visible; it is consumed on arrival.
+        self.pending_item = (target, collected_item) if collected_item else None
 
-        # Update fox heading
+        # Update fox heading (the fox turns smoothly towards it).
         heading = HEADING_MAP.get(dir_vec, 0)
         self.fox.set_walking(True, heading)
 
-        # Handle collected item
-        if collected_item:
-            self._on_item_collected(target, collected_item)
-
         # Update HUD immediately for timer/freeze/speed changes
         self._update_hud()
+        return True
 
     def _on_item_collected(self, cell: Cell, item: str) -> None:
         """Handle item collection: remove from world, show hint, and celebrate pickup."""
@@ -431,6 +496,10 @@ class Game(Entity):
         }
         self.last_hint = hints.get(item, '')
         self.hint_timer = 3.0  # show for 3 seconds
+
+        if item in ('apple', 'strawberry'):
+            # Match the eating clip: no new cell while the fox eats.
+            self.arrival_lock_timer = ARRIVAL_LOCK_DURATION
 
         if item in ('apple', 'strawberry') and self.fox:
             self.fox.celebrate_pickup()
@@ -458,30 +527,48 @@ class Game(Entity):
                 self.fox.jump()
             self._start_overview()
 
+    def _continue_after_arrival(self) -> None:
+        """Start a held-key follow-up cell or settle back to Idle."""
+        if not self.fox or not self.run_state:
+            return
+        if self.run_state.status != 'playing' or self.arrival_lock_timer > 0:
+            self.fox.set_walking(False, self.fox.heading)
+            return
+        dir_vec = self._held_move_dir()
+        if dir_vec and self._try_start_move(dir_vec):
+            # Same-frame continuation keeps Gallop running across the boundary.
+            return
+        self.fox.set_walking(False, self.fox.heading)
+
     def _update_movement(self, dt: float) -> None:
-        """Animate fox movement between cells."""
+        """Animate fox movement between cells at constant horizontal speed."""
         if not self.move_active or not self.fox:
             return
 
         self.move_timer += dt
         t = min(self.move_timer / MOVE_DURATION, 1.0)
-        # Smooth easing
-        eased = t * t * (3 - 2 * t)
 
         self.fox.position = Vec3(
-            self.move_from.x + (self.move_to.x - self.move_from.x) * eased,
+            self.move_from.x + (self.move_to.x - self.move_from.x) * t,
             0,
-            self.move_from.z + (self.move_to.z - self.move_from.z) * eased
+            self.move_from.z + (self.move_to.z - self.move_from.z) * t
         )
 
         if t >= 1.0:
+            # Land exactly on the validated cell centre before any pickup FX.
+            self.fox.position = Vec3(self.move_to)
+            arrived_cell = self.move_target_cell
             self.move_active = False
-            self.fox.set_walking(False, self.fox._heading)
             self.move_target_cell = None
-            self.move_repeat_timer = 0.0
+
+            pending = self.pending_item
+            self.pending_item = None
+            if pending and arrived_cell is not None and pending[0] == arrived_cell:
+                self._on_item_collected(arrived_cell, pending[1])
 
             # Check win/loss after move completes
             self._check_win_loss()
+            self._continue_after_arrival()
 
     def _check_win_loss(self) -> None:
         """Check if level won or lost after move completes."""
@@ -577,7 +664,7 @@ class Game(Entity):
     # -----------------------------------------------------------------------
     def _update_hud(self) -> None:
         """Update HUD with current state."""
-        if not self.run_state:
+        if not self.run_state or self.result_showing:
             return
 
         freeze_left = self.run_state.freeze_left
@@ -632,21 +719,16 @@ class Game(Entity):
             self._on_level_lost()
             return
 
+        # Arrival celebration lock counts down in real time.
+        if self.arrival_lock_timer > 0:
+            self.arrival_lock_timer = max(0.0, self.arrival_lock_timer - dt_logic)
+
         # Handle held_keys for continuous movement
-        if not self.move_active and self.run_state.status == 'playing':
-            # Check held keys in priority order
-            for key in ('w', 'up arrow', 's', 'down arrow', 'd', 'right arrow', 'a', 'left arrow'):
-                if held_keys.get(key, 0):
-                    dir_vec = self._key_to_dir(key)
-                    if dir_vec:
-                        self._try_start_move(dir_vec)
-                        break
-        elif self.move_active and self.last_move_dir:
-            # If currently moving and same direction held, prepare repeat (real-time)
-            self.move_repeat_timer -= dt_logic
-            if self.move_repeat_timer <= 0:
-                self.move_repeat_timer = MOVE_REPEAT_DELAY
-                # Will try to start next move after current completes
+        if (not self.move_active and self.arrival_lock_timer <= 0
+                and self.run_state.status == 'playing'):
+            dir_vec = self._held_move_dir()
+            if dir_vec:
+                self._try_start_move(dir_vec)
 
         # Update animations (visual)
         if self.fox:
@@ -733,8 +815,27 @@ def run_smoke(output_path: str) -> int:
 
         application.quit()
 
-    # Schedule after a few frames to let everything settle
-    invoke(delayed_screenshot, delay=0.5)
+    class _SmokeScreenshotTrigger(Entity):
+        """Fire the smoke screenshot after a minimum number of update frames."""
+
+        def __init__(self, callback: Callable[[], None], min_frames: int = 30) -> None:
+            super().__init__()
+            self._callback = callback
+            self._frames_left = min_frames
+            self._fired = False
+
+        def update(self) -> None:
+            if self._fired:
+                return
+            self._frames_left -= 1
+            if self._frames_left <= 0:
+                # Disable before capturing so no later frame can fire again.
+                self._fired = True
+                self.disable()
+                self._callback()
+
+    # Wait for real update frames (shader load included) instead of wall time.
+    _screenshot_trigger = _SmokeScreenshotTrigger(delayed_screenshot)
 
     app.run()
 

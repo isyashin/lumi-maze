@@ -4,7 +4,7 @@
 
 ## Запуск готовой игры
 
-Последняя проверенная сборка в этой рабочей папке: `dist-visual\LumiMaze\LumiMaze.exe`. Для переноса на другой компьютер копируйте **всю папку** `dist-visual\LumiMaze`, включая каталог `_internal`. Интернет во время игры не нужен.
+Последняя проверенная сборка в этой рабочей папке: `dist-release\LumiMaze\LumiMaze.exe`. Для переноса на другой компьютер копируйте **всю папку** `dist-release\LumiMaze`, включая каталог `_internal`. Интернет во время игры не нужен.
 
 Если сборки нет, запустите игру из исходников в PowerShell из этой папки:
 
@@ -32,6 +32,6 @@ $env:PYTHONPATH = 'src'
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-`build.ps1` использует локальное виртуальное окружение и собирает папку `dist\LumiMaze`. Если предыдущая сборка ещё запущена, используйте `.\build.ps1 -OutputDir dist-visual`. Для снимка окна: `.\.venv\Scripts\python.exe run_game.py --smoke screenshots\preview.png`. Готовый `.exe` тоже принимает `--smoke`.
+`build.ps1` использует локальное виртуальное окружение и собирает папку `dist\LumiMaze`. Если предыдущая сборка ещё запущена, используйте `.\build.ps1 -OutputDir dist-release`. Для снимка окна: `.\.venv\Scripts\python.exe run_game.py --smoke screenshots\preview.png`. Готовый `.exe` тоже принимает `--smoke`.
 
 Требования и подробные правила — [docs/PRODUCT.md](docs/PRODUCT.md), устройство модулей — [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), происхождение готовых моделей и текстур — [docs/ASSETS.md](docs/ASSETS.md). Это отдельный Git-репозиторий внутри рабочего пространства GPT-техдира.
