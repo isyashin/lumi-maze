@@ -1,0 +1,62 @@
+{
+  "source_files": [
+    {
+      "file": "Fox_Falling.fbx",
+      "sha256": "03a48bc239b0acd0aa5b0c7ce76205b81811286a5bdbbe29437020c8745f0f55"
+    },
+    {
+      "file": "Fox_Idle.fbx",
+      "sha256": "ff130daf28c6e92a5c2e54b5730b135e4e69071089470b5411fa8f1189a9a800"
+    },
+    {
+      "file": "Fox_Jump_InAir.fbx",
+      "sha256": "b4d7c2f35299b63fe144c6a518f5a73c17ad54aa785e43541f7dc17ceafb3dfa"
+    },
+    {
+      "file": "Fox_Jump_Pivot_InPlace.fbx",
+      "sha256": "78e94ea315913ee5f7a833d17e717597da0caa07450f1a86d1db3be15aaa8cb6"
+    },
+    {
+      "file": "Fox_Run_InPlace.fbx",
+      "sha256": "c5153e9d75205c846acc29c610b935911f1b25a21750101933ab0d64d299c710"
+    },
+    {
+      "file": "Fox_Sit_Yes.fbx",
+      "sha256": "3718d44f16a24c5b3a9b35b23507f277ddc2f47c77b7a2036202a043c75d4085"
+    },
+    {
+      "file": "Fox.fbx",
+      "sha256": "23b65f56fe6835b263576876bdd26cf73589de51d6e887bdb001ebde74274ea1"
+    },
+    {
+      "file": "T_Fox_AO.png",
+      "sha256": "0def7a27754b7febf9695c5fef4755741c1ab990c16035c166c2a57a32be19eb"
+    },
+    {
+      "file": "T_Fox_BC.png",
+      "sha256": "126c02fb78abaa7e4abf48fce85203d5c7c678cde361e520c78fa1b08dc3844b"
+    },
+    {
+      "file": "T_Fox_Normal.png",
+      "sha256": "01420de7923d4d3e4bccad8148154d2896baefc951edba6d5d3b7a385f5f4c46"
+    }
+  ],
+  "mirror_commit": "b9ae3c074876587282e52e0108715923f5d1143c",
+  "triangles": 3450,
+  "derived_file": "../pxltiger_fox.glb",
+  "blender": "4.5.9 LTS",
+  "clips": [
+    "Idle",
+    "Run",
+    "Jump",
+    "InAir",
+    "Fall",
+    "Pickup"
+  ],
+  "original_url": "https://sketchfab.com/3d-models/fox-39f97fe58f0b47ce80b6e02814001dd7",
+  "derived_sha256": "7c722435bc41a72d89278ada28172fe3c8a64abdb95080dd56245d223b685962",
+  "checked": "2026-10-20",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "license": "CC BY 4.0",
+  "author": "Pxltiger"
+}

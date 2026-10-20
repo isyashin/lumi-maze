@@ -1,4 +1,4 @@
-"""Batched wall geometry and the camera cutaway.
+"""Batched wall geometry and camera visibility handling.
 
 Every maze wall is baked into two shared Ursina meshes instead of spawning a
 body/cap/plinth Entity for each segment:
@@ -6,27 +6,26 @@ body/cap/plinth Entity for each segment:
 * a textured body batch (hard normals, baked UVs, per-vertex tint), and
 * an untextured trim batch holding the cap and plinth cubes.
 
-A wall may later be collapsed in Y for the camera without rebuilding the mesh.
-The original vertex ranges are kept and edited in place with
-``GeomVertexRewriter``, which is cheap enough for the handful of walls that can
-occlude the fox at once.  Collision and the maze data are never touched.
+Walls that occlude the fox become semi-transparent (alpha-to-coverage MMultisample)
+and return to opaque when the sightline clears. No vertex positions are modified.
 """
 
 from __future__ import annotations
 
 import math
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Optional, Tuple
 
-from panda3d.core import GeomVertexRewriter
+from panda3d.core import GeomVertexRewriter, TransparencyAttrib
 from ursina import Entity, Mesh, application, color
 
 FLOOR_Y = -0.12
-CUT_HEIGHT = 0.18          # collapsed body height above the floor baseline
-CUT_CAP_HEIGHT = 0.04      # compressed cap height at full cutaway
-CUTAWAY_TIME = 0.15        # seconds to fully lower/restore one wall
-OCCLUSION_RADIUS = 4.0     # only walls this close to the fox react
-FOOT_OFFSET_Y = 0.30       # camera targets the fox feet, not its head
 CAP_HEIGHT = 0.10
+OCCLUSION_RADIUS = 12.0     # walls within this distance of fox may turn transparent
+FOOT_OFFSET_Y = 0.30        # camera targets the fox feet
+CHEST_OFFSET_Y = 0.95       # camera targets the fox chest (approx)
+BOUNDS_EXPANSION = 0.30     # expand AABB by this much for readability
+OCCLUDED_ALPHA = 0.25       # semi-transparent alpha when occluding (0.22-0.28)
+TRANSPARENCY_PRIORITY = 20  # render state priority for transparency
 
 RGB = Tuple[int, int, int]
 Vec3f = Tuple[float, float, float]
@@ -53,24 +52,109 @@ def _append_cube(vertices: List[Vec3f], normals: List[Vec3f],
                  colors: List[Tuple[float, float, float, float]],
                  triangles: List[Tuple[int, int, int]],
                  center: Vec3f, size: Vec3f, rgb: RGB,
-                 uv_scale: Tuple[float, float] = (1.0, 1.0)) -> int:
-    """Append one 24-vertex cube and return the first vertex row."""
+                 uv_scale: Tuple[float, float] = (1.0, 1.0)) -> Tuple[int, List[Tuple[float, float, float, float]]]:
+    """Append one 96-vertex rounded cube and return the first vertex row and original colors."""
     cx, cy, cz = center
     hx, hy, hz = size[0] / 2.0, size[1] / 2.0, size[2] / 2.0
     base = len(vertices)
     rgba = _rgba(rgb)
+    orig_colors = []
 
-    for normal, corners in _FACES:
-        face_start = len(vertices)
-        for (sx, sy, sz), (u, v) in zip(corners, _FACE_UVS):
-            vertices.append((cx + sx * hx, cy + sy * hy, cz + sz * hz))
-            normals.append(normal)
-            uvs.append((u * uv_scale[0], v * uv_scale[1]))
-            colors.append(rgba)
-        triangles.append((face_start, face_start + 1, face_start + 2))
-        triangles.append((face_start, face_start + 2, face_start + 3))
+    # Rounding radius: min(0.065, min(size) * 0.22)
+    b = min(0.065, min(size) * 0.22)
+    # Inner box half-extents
+    inner_x = hx - b
+    inner_y = hy - b
+    inner_z = hz - b
 
-    return base
+    for face_normal, corners in _FACES:
+        # corners: (c0, c1, c2, c3) in CCW order from outside
+        c0 = corners[0]  # (sx, sy, sz)
+        c1 = corners[1]
+        c3 = corners[3]
+
+        # Edge vectors from c0 (in half-size coordinate space, i.e. signs * halfsize)
+        # u runs c0->c1, v runs c0->c3
+        u_vec = (c1[0] - c0[0], c1[1] - c0[1], c1[2] - c0[2])
+        v_vec = (c3[0] - c0[0], c3[1] - c0[1], c3[2] - c0[2])
+
+        # Edge lengths in world space
+        edge_u_len = math.sqrt((u_vec[0]*hx)**2 + (u_vec[1]*hy)**2 + (u_vec[2]*hz)**2)
+        edge_v_len = math.sqrt((v_vec[0]*hx)**2 + (v_vec[1]*hy)**2 + (v_vec[2]*hz)**2)
+
+        # Parameter fractions for 4x4 grid
+        if edge_u_len > 1e-9:
+            u_fracs = (0.0, b / edge_u_len, 1.0 - b / edge_u_len, 1.0)
+        else:
+            u_fracs = (0.0, 0.0, 1.0, 1.0)
+        if edge_v_len > 1e-9:
+            v_fracs = (0.0, b / edge_v_len, 1.0 - b / edge_v_len, 1.0)
+        else:
+            v_fracs = (0.0, 0.0, 1.0, 1.0)
+
+        # UV fractions match the grid (0..1)
+        uv_u_fracs = u_fracs
+        uv_v_fracs = v_fracs
+
+        face_verts = []  # will hold 16 vertex indices for this face
+
+        for vi, v_frac in enumerate(v_fracs):
+            for ui, u_frac in enumerate(u_fracs):
+                # Bilinear position on flat face (in half-size coordinate space)
+                raw_x = c0[0] + u_frac * u_vec[0] + v_frac * v_vec[0]
+                raw_y = c0[1] + u_frac * u_vec[1] + v_frac * v_vec[1]
+                raw_z = c0[2] + u_frac * u_vec[2] + v_frac * v_vec[2]
+
+                # Scale to world half-size
+                raw_x *= hx
+                raw_y *= hy
+                raw_z *= hz
+
+                # Clamp to inner box
+                core_x = max(-inner_x, min(inner_x, raw_x))
+                core_y = max(-inner_y, min(inner_y, raw_y))
+                core_z = max(-inner_z, min(inner_z, raw_z))
+
+                # Delta from core to raw
+                dx = raw_x - core_x
+                dy = raw_y - core_y
+                dz = raw_z - core_z
+
+                # Normal
+                length = math.sqrt(dx*dx + dy*dy + dz*dz)
+                if length > 1e-9:
+                    nx, ny, nz = dx / length, dy / length, dz / length
+                else:
+                    # On flat region: use face normal
+                    nx, ny, nz = face_normal
+
+                # Rounded position
+                px = cx + core_x + nx * b
+                py = cy + core_y + ny * b
+                pz = cz + core_z + nz * b
+
+                vertices.append((px, py, pz))
+                normals.append((nx, ny, nz))
+                uv_u = uv_u_fracs[ui] * uv_scale[0]
+                uv_v = uv_v_fracs[vi] * uv_scale[1]
+                uvs.append((uv_u, uv_v))
+                colors.append(rgba)
+                orig_colors.append(rgba)
+                face_verts.append(len(vertices) - 1)
+
+        # Generate triangles for 3x3 quads with same outward winding as old _FACES
+        # face_verts is 4x4 grid row-major: [v0u0, v0u1, v0u2, v0u3, v1u0, ...]
+        for gy in range(3):
+            for gx in range(3):
+                i0 = face_verts[gy * 4 + gx]
+                i1 = face_verts[gy * 4 + gx + 1]
+                i2 = face_verts[(gy + 1) * 4 + gx + 1]
+                i3 = face_verts[(gy + 1) * 4 + gx]
+                # Two triangles per quad, CCW from outside (same as original)
+                triangles.append((i0, i1, i2))
+                triangles.append((i0, i2, i3))
+
+    return base, orig_colors
 
 
 def _as_xyz(value) -> Vec3f:
@@ -170,24 +254,22 @@ class WallBatch:
         x, _y, z = pos
         sx, sy, sz = scale
 
-        body_start = _append_cube(
+        body_start, body_orig_colors = _append_cube(
             self._body_vertices, self._body_normals, self._body_uvs,
             self._body_colors, self._body_triangles,
             (x, self.floor_y + sy / 2.0, z), (sx, sy, sz),
             body_rgb, uv_scale,
         )
-        body_orig = list(self._body_vertices[body_start:body_start + 24])
 
         # Cap and plinth keep their distinct shapes and per-segment tint.
-        cap_start = _append_cube(
+        cap_start, cap_orig_colors = _append_cube(
             self._trim_vertices, self._trim_normals, self._trim_uvs,
             self._trim_colors, self._trim_triangles,
             (x, self.floor_y + sy + CAP_HEIGHT / 2.0, z),
             (sx + 0.08, CAP_HEIGHT, sz + 0.08), cap_rgb,
         )
-        cap_orig = list(self._trim_vertices[cap_start:cap_start + 24])
 
-        plinth_start = _append_cube(
+        plinth_start, plinth_orig_colors = _append_cube(
             self._trim_vertices, self._trim_normals, self._trim_uvs,
             self._trim_colors, self._trim_triangles,
             (x, self.floor_y + 0.09, z),
@@ -200,10 +282,11 @@ class WallBatch:
 
         self.segments.append({
             'body_start': body_start,
-            'body_orig': body_orig,
+            'body_orig_colors': body_orig_colors,
             'cap_start': cap_start,
-            'cap_orig': cap_orig,
+            'cap_orig_colors': cap_orig_colors,
             'plinth_start': plinth_start,
+            'plinth_orig_colors': plinth_orig_colors,
             'sx': sx,
             'sy': sy,
             'sz': sz,
@@ -212,7 +295,7 @@ class WallBatch:
             'bounds_2d': (x - half_x, x + half_x, z - half_z, z + half_z),
             'bmin': (x - half_x, self.floor_y - 0.01, z - half_z),
             'bmax': (x + half_x, top, z + half_z),
-            'p': 0.0,
+            'p': 1.0,
             'target': 0.0,
         })
 
@@ -237,6 +320,7 @@ class WallBatch:
             color=color.white,
         )
         body_entity.setShader(shader, 10)
+        body_entity.setTransparency(TransparencyAttrib.MMultisample, TRANSPARENCY_PRIORITY)
         # Keep the rendered Mesh so GeomVertexRewriter edits the visible data.
         self.body = body_entity.model
         self._body_entity = body_entity
@@ -255,6 +339,7 @@ class WallBatch:
             color=color.white,
         )
         trim_entity.setShader(shader, 10)
+        trim_entity.setTransparency(TransparencyAttrib.MMultisample, TRANSPARENCY_PRIORITY)
         self.trim = trim_entity.model
         self._trim_entity = trim_entity
 
@@ -276,64 +361,77 @@ class WallBatch:
     # Camera cutaway
     # ------------------------------------------------------------------ #
     def update_visibility(self, camera_pos, fox_pos, dt: float) -> None:
-        """Collapse walls between the camera and the fox, then restore them."""
-        if not self._built or self._body_vdata is None:
+        """Make walls between camera and fox semi-transparent, then restore."""
+        if not self._built or self._body_vdata is None or self._trim_vdata is None:
             return
 
         cam = _as_xyz(camera_pos)
         fox = _as_xyz(fox_pos)
-        target = (fox[0], fox[1] + FOOT_OFFSET_Y, fox[2])
-        step = max(0.0, min(float(dt), 0.1)) / CUTAWAY_TIME
+        foot_target = (fox[0], fox[1] + FOOT_OFFSET_Y, fox[2])
+        chest_target = (fox[0], fox[1] + CHEST_OFFSET_Y, fox[2])
+        step = max(0.0, min(float(dt), 0.1)) * 8.0  # fast transition, ~0.125s
 
         for seg in self.segments:
+            # Quick 2D distance cull
             near = (_distance_to_aabb_2d(fox[0], fox[2], seg['bounds_2d'])
                     <= OCCLUSION_RADIUS)
-            occluding = near and _ray_hits_aabb(cam, target,
-                                                seg['bmin'], seg['bmax'])
-            desired = 1.0 if occluding else 0.0
-            old = seg['p']
 
-            if desired > old:
-                new_p = min(1.0, old + step)
-            elif desired < old:
-                new_p = max(0.0, old - step)
-            else:
-                new_p = old
+            # Expanded bounds for readability
+            bmin_exp = (seg['bmin'][0] - BOUNDS_EXPANSION,
+                        seg['bmin'][1] - BOUNDS_EXPANSION,
+                        seg['bmin'][2] - BOUNDS_EXPANSION)
+            bmax_exp = (seg['bmax'][0] + BOUNDS_EXPANSION,
+                        seg['bmax'][1] + BOUNDS_EXPANSION,
+                        seg['bmax'][2] + BOUNDS_EXPANSION)
 
-            if abs(new_p - old) < 1e-5:
+            # Two rays: foot and chest
+            occluding = (near and
+                         (_ray_hits_aabb(cam, foot_target, bmin_exp, bmax_exp) or
+                          _ray_hits_aabb(cam, chest_target, bmin_exp, bmax_exp)))
+
+            desired = OCCLUDED_ALPHA if occluding else 1.0
+            old_alpha = seg['p']  # p now stores current alpha (1.0 or OCCLUDED_ALPHA)
+
+            if abs(desired - old_alpha) < 1e-3:
                 continue
 
-            seg['p'] = new_p
-            self._rewrite_segment(seg, new_p)
+            # Smooth transition
+            if desired < old_alpha:
+                new_alpha = max(desired, old_alpha - step)
+            else:
+                new_alpha = min(desired, old_alpha + step)
 
-    def _rewrite_segment(self, seg: dict, p: float) -> None:
-        """Edit only this wall's existing vertex rows in both shared meshes."""
-        sy = seg['sy']
-        body_h = sy + (CUT_HEIGHT - sy) * p
-        body_top = self.floor_y + body_h
-        cap_top = body_top + CAP_HEIGHT + (CUT_CAP_HEIGHT - CAP_HEIGHT) * p
+            if abs(new_alpha - old_alpha) < 1e-4:
+                continue
 
-        writer = GeomVertexRewriter(self._body_vdata, 'vertex')
-        writer.setRow(seg['body_start'])
-        for x, y, z in seg['body_orig']:
-            t = (y - self.floor_y) / sy if sy > 1e-6 else 0.0
-            writer.setData3f(x, self.floor_y + body_h * t, z)
+            seg['p'] = new_alpha
+            self._rewrite_segment_colors(seg, new_alpha)
 
-        cap_bottom_orig = self.floor_y + sy
-        writer = GeomVertexRewriter(self._trim_vdata, 'vertex')
-        writer.setRow(seg['cap_start'])
-        for x, y, z in seg['cap_orig']:
-            t = ((y - cap_bottom_orig) / CAP_HEIGHT
-                 if CAP_HEIGHT > 1e-6 else 0.0)
-            t = max(0.0, min(1.0, t))
-            writer.setData3f(x, body_top + (cap_top - body_top) * t, z)
+    def _rewrite_segment_colors(self, seg: dict, alpha: float) -> None:
+        """Edit only the color-column alpha of this wall's vertices in both meshes."""
+        # Body: 24 vertices
+        body_writer = GeomVertexRewriter(self._body_vdata, 'color')
+        body_writer.setRow(seg['body_start'])
+        for r, g, b, _ in seg['body_orig_colors']:
+            body_writer.setData4f(r, g, b, alpha)
 
-        # Bounds only need to be refreshed for the two affected batches.
+        # Cap: 24 vertices
+        cap_writer = GeomVertexRewriter(self._trim_vdata, 'color')
+        cap_writer.setRow(seg['cap_start'])
+        for r, g, b, _ in seg['cap_orig_colors']:
+            cap_writer.setData4f(r, g, b, alpha)
+
+        # Plinth: 24 vertices
+        plinth_writer = GeomVertexRewriter(self._trim_vdata, 'color')
+        plinth_writer.setRow(seg['plinth_start'])
+        for r, g, b, _ in seg['plinth_orig_colors']:
+            plinth_writer.setData4f(r, g, b, alpha)
+
+        # Mark bounds stale so Panda recomputes if needed
         for mesh in (self.body, self.trim):
             node = _geom_node(mesh)
-            if node is None:
-                continue
-            try:
-                node.markBoundsStale()
-            except Exception:
-                pass
+            if node is not None:
+                try:
+                    node.markBoundsStale()
+                except Exception:
+                    pass

@@ -18,7 +18,7 @@ from .scenery import GROUND_Y as SCENERY_GROUND_Y, populate_scenery, place_small
 from .wall_mesh import WallBatch
 
 CELL_SIZE = 3.0
-WALL_HEIGHT = 1.25
+WALL_HEIGHT = 1.55
 WALL_THICKNESS = 0.26
 FLOOR_Y = -0.12
 GROUND_Y = -0.32
@@ -89,6 +89,8 @@ class WorldView:
         self.item_nodes: Dict[Cell, ItemNode] = {}
         self._cleared = False
         self._scenery_nodes = []
+        self._scenery_bounds = []  # cached (node, bmin, bmax) for perimeter models
+        self._scenery_orig_states = []  # original RenderState for each perimeter node
 
         theme_id = self._theme_id(maze.theme)
         dim_hash = (maze.width * 1000 + maze.height) & 0xFFFFFFFF
@@ -109,8 +111,9 @@ class WorldView:
         self._build_items()
         self._build_decorations()
         self._scenery_nodes = populate_scenery(
-            self.static_root, maze, CELL_SIZE, (theme_id << 24) ^ dim_hash
+            self.root, maze, CELL_SIZE, (theme_id << 24) ^ dim_hash
         )
+        self._cache_scenery_bounds()
         self._finalize_static()
 
     # ------------------------------------------------------------------ #
@@ -454,10 +457,32 @@ class WorldView:
             self._build_water_accents()
 
     def _finalize_static(self) -> None:
-        """Flatten the finished static dressing into a single draw node."""
+        """Flatten only low interior decorative props; keep perimeter models separate."""
         self.static_root.clear_model_nodes()
         self.static_root.flattenStrong()
-        self._scenery_nodes.clear()
+        # Perimeter scenery nodes remain individual NodePaths (in self.root), not flattened.
+        # self._scenery_nodes retains references for visibility checks.
+
+    def _cache_scenery_bounds(self) -> None:
+        """Cache tight world/root bounds for each perimeter scenery model once."""
+        from panda3d.core import TransparencyAttrib
+        self._scenery_bounds.clear()
+        self._scenery_orig_states.clear()
+
+        for node in self._scenery_nodes:
+            if node.isEmpty():
+                continue
+            try:
+                # Get tight bounds in root space
+                bmin, bmax = node.getTightBounds(self.root)
+                self._scenery_bounds.append((node, bmin, bmax))
+                # Cache original render state for exact restoration
+                self._scenery_orig_states.append((node, node.getState()))
+                # Ensure transparency is set up for alpha-to-coverage
+                node.setTransparency(TransparencyAttrib.MMultisample, 20)
+            except Exception:
+                # Skip nodes that can't provide bounds
+                continue
 
     def _wall_sides(self, cell: Cell):
         x, z = cell
@@ -543,8 +568,58 @@ class WorldView:
             destroy(node.root)
 
     def update_visibility(self, camera_pos, fox_pos, dt: float) -> None:
-        """Forward the camera cutaway update to the shared wall batches."""
+        """Update wall and scenery transparency for camera/fox sightline occlusion."""
+        # Walls: per-vertex alpha via WallBatch
         self.walls.update_visibility(camera_pos, fox_pos, dt)
+
+        # Scenery: per-node color scale alpha with MMultisample
+        if not self._scenery_bounds:
+            return
+
+        from panda3d.core import TransparencyAttrib
+        cam = camera_pos
+        fox = fox_pos
+        try:
+            cam_pos = (float(cam.x), float(cam.y), float(cam.z))
+            fox_pos_vec = (float(fox.x), float(fox.y), float(fox.z))
+        except AttributeError:
+            cam_pos = (float(cam[0]), float(cam[1]), float(cam[2]))
+            fox_pos_vec = (float(fox[0]), float(fox[1]), float(fox[2]))
+
+        foot_target = (fox_pos_vec[0], fox_pos_vec[1] + 0.30, fox_pos_vec[2])
+        chest_target = (fox_pos_vec[0], fox_pos_vec[1] + 0.95, fox_pos_vec[2])
+        BOUNDS_EXPANSION = 0.30
+
+        for idx, (node, bmin, bmax) in enumerate(self._scenery_bounds):
+            if node.isEmpty():
+                continue
+
+            # Expanded bounds for readability
+            bmin_exp = (bmin[0] - BOUNDS_EXPANSION, bmin[1] - BOUNDS_EXPANSION, bmin[2] - BOUNDS_EXPANSION)
+            bmax_exp = (bmax[0] + BOUNDS_EXPANSION, bmax[1] + BOUNDS_EXPANSION, bmax[2] + BOUNDS_EXPANSION)
+
+            # Check camera inside expanded bounds
+            cam_inside = (bmin_exp[0] <= cam_pos[0] <= bmax_exp[0] and
+                          bmin_exp[1] <= cam_pos[1] <= bmax_exp[1] and
+                          bmin_exp[2] <= cam_pos[2] <= bmax_exp[2])
+
+            # Check ray hits (foot and chest)
+            from .wall_mesh import _ray_hits_aabb
+            occluding = cam_inside or _ray_hits_aabb(cam_pos, foot_target, bmin_exp, bmax_exp) or \
+                        _ray_hits_aabb(cam_pos, chest_target, bmin_exp, bmax_exp)
+
+            if occluding:
+                # Semi-transparent: set color scale alpha ~0.22, keep MMultisample
+                node.setColorScale(1, 1, 1, 0.22, 100)  # priority 100 overrides
+                node.setTransparency(TransparencyAttrib.MMultisample, 20)
+            else:
+                # Restore exact original RenderState (including any glTF transparency/alpha mode)
+                orig_state = self._scenery_orig_states[idx][1] if idx < len(self._scenery_orig_states) else None
+                if orig_state:
+                    node.setState(orig_state)
+                else:
+                    node.clearColorScale()
+                    node.setTransparency(TransparencyAttrib.MMultisample, 20)
 
     def update(self, dt: float) -> None:
         """Bob and rotate pickups; the exit arch remains static."""
@@ -566,5 +641,7 @@ class WorldView:
         destroy(self.root)
         self.root = None
         self.item_nodes.clear()
-        self._scenery_nodes = []
+        self._scenery_nodes.clear()
+        self._scenery_bounds.clear()
+        self._scenery_orig_states.clear()
         self._cleared = True

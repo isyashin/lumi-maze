@@ -1,5 +1,6 @@
 from pathlib import Path
 from ursina import Texture
+from panda3d.core import Texture as PandaTexture
 
 # Cache for loaded textures to avoid redundant loading
 _texture_cache: dict[tuple[str, str], Texture] = {}
@@ -55,7 +56,9 @@ def texture_for(theme: str, surface: str, seed: int = 0) -> Texture:
     if not Path(path).is_file():
         raise FileNotFoundError(f"Texture asset not found: {path}")
 
-    tex = Texture(path, filtering='bilinear')
+    tex = Texture(path, filtering='mipmap')
+    tex._texture.setAnisotropicDegree(8)
+    tex._texture.setFormat(PandaTexture.F_srgb_alpha if tex._texture.getNumComponents() == 4 else PandaTexture.F_srgb)
     _texture_cache[cache_key] = tex
     return tex
 
@@ -66,10 +69,12 @@ def ground_texture() -> Texture:
     if cache_key in _texture_cache:
         return _texture_cache[cache_key]
 
-    path = _asset_path('grasswithleafs.png')
+    path = _asset_path('grass_02.png')
     if not Path(path).is_file():
         raise FileNotFoundError(f"Texture asset not found: {path}")
 
-    tex = Texture(path, filtering='bilinear')
+    tex = Texture(path, filtering='mipmap')
+    tex._texture.setAnisotropicDegree(8)
+    tex._texture.setFormat(PandaTexture.F_srgb_alpha if tex._texture.getNumComponents() == 4 else PandaTexture.F_srgb)
     _texture_cache[cache_key] = tex
     return tex

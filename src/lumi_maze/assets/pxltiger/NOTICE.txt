@@ -1,0 +1,10 @@
+Fox / Toon Fox — Pxltiger
+Original: https://sketchfab.com/3d-models/fox-39f97fe58f0b47ce80b6e02814001dd7
+Author: https://sketchfab.com/pxltiger
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+https://creativecommons.org/licenses/by/4.0/
+
+Changes for Lumi Maze (20 October 2026): converted FBX to glTF/GLB in Blender 4.5.9; normalized and centered the rig and mesh; scaled translation animation curves consistently; assigned base-color and normal textures; smooth shading; retained and renamed six clips (Idle, Run, Jump, InAir, Fall, Pickup). No endorsement by the original author is implied.
+
+Source mirror: https://github.com/blu-octopus/chicken-chase/tree/b9ae3c074876587282e52e0108715923f5d1143c/Assets/Fox
+The mirror credits Pxltiger; the original author separately offers the same 3450-triangle Fox under CC BY 4.0 on Sketchfab. The Sketchfab license is the license selected for this derivative.

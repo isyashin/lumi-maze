@@ -1,0 +1,14 @@
+Луми и лабиринты — ассеты и лицензии
+
+Лисёнок: Fox — Pxltiger, CC BY 4.0.
+https://sketchfab.com/3d-models/fox-39f97fe58f0b47ce80b6e02814001dd7
+https://creativecommons.org/licenses/by/4.0/
+Изменения: преобразование FBX в GLB, масштаб и центрирование скелета/меша, шесть клипов, рисованные материалы и normal map. Автор не одобрял эту игру. Подробности: _internal/lumi_maze/assets/pxltiger/NOTICE.txt
+
+Окружение: Quaternius Stylized Nature MegaKit, CC0.
+https://quaternius.itch.io/stylized-nature-megakit
+Фрукты: Kenney Food Kit, CC0. https://kenney.nl/assets/food-kit
+Трава: rubberduck, handpainted grass texture pack, CC0 (на основе CC0 drummyfish).
+https://opengameart.org/content/handpainted-grass-texture-pack
+Каменные и песчаные покрытия: MELLE и PamNawi, OpenGameArt, выбран вариант CC0; исходные ссылки находятся в документации проекта ASSETS.md.
+Меню: рендер этой игры. Карта освещения: сгенерирована tools/bake_environment.py.

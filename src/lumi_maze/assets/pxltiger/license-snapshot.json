@@ -1,0 +1,19 @@
+{
+  "checked": "2026-10-20",
+  "source": "https://sketchfab.com/3d-models/fox-39f97fe58f0b47ce80b6e02814001dd7",
+  "uid": "39f97fe58f0b47ce80b6e02814001dd7",
+  "triangles": 3450,
+  "license": {
+    "uri": "https://api.sketchfab.com/v3/licenses/322a749bcfa841b29dff1e8a1bb74b0b",
+    "label": "CC Attribution",
+    "fullName": "Creative Commons Attribution",
+    "requirements": "Author must be credited. Commercial use is allowed.",
+    "url": "http://creativecommons.org/licenses/by/4.0/",
+    "slug": "by"
+  },
+  "name": "Fox",
+  "animationCount": 30,
+  "author_url": "https://sketchfab.com/pxltiger",
+  "isDownloadable": true,
+  "author": "pxltiger"
+}

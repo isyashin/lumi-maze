@@ -31,9 +31,11 @@ WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
 
 # Camera defaults
+CAMERA_OFFSET = (0, 5.5, -8.5)
+CAMERA_FOV = 60
 CAM_DISTANCE = 12.0
 CAM_HEIGHT = 7.0
-CAM_LOOK_OFFSET_Y = 1.0
+CAM_LOOK_OFFSET_Y = 0.7
 CAM_SMOOTH = 12.0
 
 # Overview camera for trampoline
@@ -47,10 +49,10 @@ ARRIVAL_LOCK_DURATION = 0.65  # short fruit-eating pause before the next move
 
 # Per-theme scene colours: (sky, sun, ambient) as RGB tuples.
 THEME_LIGHTING = {
-    'stone': ((75, 165, 230), (255, 236, 198), (105, 111, 119)),
-    'forest': ((76, 159, 202), (255, 240, 206), (101, 119, 95)),
-    'cave': ((35, 48, 78), (151, 175, 228), (84, 88, 119)),
-    'streams': ((73, 174, 225), (237, 246, 229), (88, 117, 126)),
+    'stone': ((75, 165, 230), (255, 236, 198), (37, 39, 42)),
+    'forest': ((76, 159, 202), (255, 240, 206), (35, 42, 33)),
+    'cave': ((35, 48, 78), (151, 175, 228), (29, 31, 42)),
+    'streams': ((73, 174, 225), (237, 246, 229), (31, 41, 44)),
 }
 
 # Heading mapping: (dx, dz) -> degrees (0 = +Z, 90 = +X)
@@ -99,6 +101,9 @@ class Game(Entity):
         self.cam_overview_start_pos = Vec3(0, 0, 0)
         self.cam_overview_start_rot = Vec3(0, 0, 0)
 
+        # Trampoline jump and overview state
+        self.overview_pending = 0.0
+
         # Movement animation
         self.move_active = False
         self.move_timer = 0.0
@@ -141,10 +146,10 @@ class Game(Entity):
 
         # Camera follows cam_target
         camera.parent = self.cam_target
-        camera.position = (-4.8, 2.2, -5.4)
+        camera.position = CAMERA_OFFSET
         camera.look_at(self.cam_target.position)
         camera.rotation_z = 0
-        camera.fov = 68
+        camera.fov = CAMERA_FOV
 
     def input(self, key: str) -> None:
         """Handle key press events via Ursina's entity input system."""
@@ -285,6 +290,7 @@ class Game(Entity):
         self.last_move_dir = None
         self.pending_item = None
         self.arrival_lock_timer = 0.0
+        self.overview_pending = 0.0
 
     # -----------------------------------------------------------------------
     # Camera
@@ -292,12 +298,12 @@ class Game(Entity):
     def _reset_camera(self) -> None:
         """Return camera to normal third-person follow."""
         # Better third-person pose: offset from cam_target, looking slightly down and ahead
-        camera.position = (-4.8, 2.2, -5.4)
+        camera.position = CAMERA_OFFSET
+        camera.fov = CAMERA_FOV
         # Since camera is parented to cam_target, look_at uses world coordinates
         if self.cam_target:
             camera.look_at(self.cam_target.position)
         camera.rotation_z = 0
-        camera.fov = 68
         self.cam_overview_active = False
 
     def _start_overview(self) -> None:
@@ -316,13 +322,13 @@ class Game(Entity):
 
         # Always update cam_target to follow fox horizontally (even during overview)
         fox_pos = self.fox.position
-        target_pos = Vec3(fox_pos.x, CAM_LOOK_OFFSET_Y, fox_pos.z)
+        target_pos = Vec3(fox_pos.x, CAM_LOOK_OFFSET_Y + self.fox.actor.getY(), fox_pos.z)
 
         # Smooth follow (clamp interpolation factor to avoid overshoot)
         smooth_factor = min(1.0, CAM_SMOOTH * dt)
         self.cam_target_pos = Vec3(
             self.cam_target_pos.x + (target_pos.x - self.cam_target_pos.x) * smooth_factor,
-            CAM_LOOK_OFFSET_Y,
+            self.cam_target_pos.y + (target_pos.y - self.cam_target_pos.y) * smooth_factor,
             self.cam_target_pos.z + (target_pos.z - self.cam_target_pos.z) * smooth_factor
         )
         self.cam_target.position = self.cam_target_pos
@@ -351,9 +357,8 @@ class Game(Entity):
                     self.cam_overview_start_pos.y + (overview_height - self.cam_overview_start_pos.y) * eased,
                     self.cam_overview_start_pos.z + (0 - self.cam_overview_start_pos.z) * eased
                 )
-                camera.rotation_x = self.cam_overview_start_rot.x + (90 - self.cam_overview_start_rot.x) * eased
-                camera.rotation_y = self.cam_overview_start_rot.y * (1 - eased)
-                camera.rotation_z = self.cam_overview_start_rot.z * (1 - eased)
+                camera.look_at(self.cam_target.position)
+                camera.rotation_z = 0
 
                 if t >= 1.0:
                     self.cam_overview_phase = 1
@@ -362,8 +367,7 @@ class Game(Entity):
             elif self.cam_overview_phase == 1:  # Hold high
                 hold_duration = OVERVIEW_HOLD_TIME
                 camera.position = Vec3(0, overview_height, 0)
-                camera.rotation_x = 90
-                camera.rotation_y = 0
+                camera.look_at(self.cam_target.position)
                 camera.rotation_z = 0
 
                 if self.cam_overview_timer >= hold_duration:
@@ -380,9 +384,8 @@ class Game(Entity):
                     overview_height + (self.cam_overview_start_pos.y - overview_height) * eased,
                     0 + (self.cam_overview_start_pos.z - 0) * eased
                 )
-                camera.rotation_x = 90 + (self.cam_overview_start_rot.x - 90) * eased
-                camera.rotation_y = 0 + (self.cam_overview_start_rot.y - 0) * eased
-                camera.rotation_z = 0 + (self.cam_overview_start_rot.z - 0) * eased
+                camera.look_at(self.cam_target.position)
+                camera.rotation_z = 0
 
                 if t >= 1.0:
                     self.cam_overview_active = False
@@ -451,7 +454,7 @@ class Game(Entity):
 
     def _try_start_move(self, dir_vec: tuple[int, int]) -> bool:
         """Attempt to start a move to an adjacent cell."""
-        if (self.move_active or self.arrival_lock_timer > 0
+        if (self.move_active or self.arrival_lock_timer > 0 or self.overview_pending > 0 or self.cam_overview_active or (self.fox and self.fox._jumping)
                 or not self.run_state or not self.fox):
             return False
 
@@ -525,13 +528,13 @@ class Game(Entity):
         if item == 'trampoline':
             if self.fox:
                 self.fox.jump()
-            self._start_overview()
+            self.overview_pending = 0.8
 
     def _continue_after_arrival(self) -> None:
         """Start a held-key follow-up cell or settle back to Idle."""
         if not self.fox or not self.run_state:
             return
-        if self.run_state.status != 'playing' or self.arrival_lock_timer > 0:
+        if (self.run_state.status != 'playing' or self.arrival_lock_timer > 0 or self.overview_pending > 0 or self.cam_overview_active or self.fox._jumping):
             self.fox.set_walking(False, self.fox.heading)
             return
         dir_vec = self._held_move_dir()
@@ -702,7 +705,10 @@ class Game(Entity):
                 self._update_hud()
 
         # Pause: stop game logic but keep UI responsive
-        if self.paused or self.result_showing or not self.run_state:
+        if self.paused:
+            return
+
+        if self.result_showing or not self.run_state:
             if self.fox:
                 self.fox.update_animation(dt_visual)
             if self.world_view:
@@ -738,6 +744,13 @@ class Game(Entity):
 
         # Camera (visual)
         self._update_camera(dt_logic if self.cam_overview_active else dt_visual)
+
+        # Handle overview pending countdown
+        if self.overview_pending > 0:
+            self.overview_pending -= dt_logic
+            if self.overview_pending <= 0:
+                self.overview_pending = 0.0
+                self._start_overview()
 
         # Movement animation (visual)
         self._update_movement(dt_visual)

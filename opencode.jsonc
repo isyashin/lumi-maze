@@ -1,14 +1,46 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "warming": false,
-  "tool_output": { "max_lines": 200, "max_bytes": 10000 },
+  "tool_output": {
+    "max_lines": 1100,
+    "max_bytes": 50000
+  },
   "permissions": [
-    { "action": "*", "resource": "*", "effect": "deny" },
-    { "action": "read", "resource": "*", "effect": "allow" },
-    { "action": "edit", "resource": "*", "effect": "allow" },
-    { "action": "execute", "resource": "*", "effect": "allow" },
-    { "action": "shell", "resource": "python -m pytest -q", "effect": "allow" },
-    { "action": "external_directory", "resource": "*", "effect": "deny" }
+    {
+      "action": "*",
+      "resource": "*",
+      "effect": "deny"
+    },
+    {
+      "action": "read",
+      "resource": "*",
+      "effect": "allow"
+    },
+    {
+      "action": "edit",
+      "resource": "*",
+      "effect": "allow"
+    },
+    {
+      "action": "execute",
+      "resource": "*",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "python -m pytest -q",
+      "effect": "deny"
+    },
+    {
+      "action": "external_directory",
+      "resource": "*",
+      "effect": "deny"
+    }
   ],
-  "agents": { "build": { "steps": 12 } }
+  "agents": {
+    "build": {
+      "steps": 16,
+      "system": "You are a scoped file editor working for a technical lead. Read only the files required by the attached task, then save the requested code with Read/Write/Edit tools. Do not explore tools, execute code, use shell/network/subagents or report tests you did not run. The coordinator reviews the diff and executes all acceptance checks. Respect file ownership and do not change configuration, dependencies or Git. If the task requests a text or JSON patch, return that complete artefact instead of editing files. Report actual results briefly."
+    }
+  }
 }
