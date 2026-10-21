@@ -64,8 +64,8 @@ class Fox(Entity):
         )
         self.actor = Actor(asset_path)
         self.actor.reparentTo(self)
-        # Node shader with scene priority 10
-        self.actor.setShader(application.base.render.getShader(), 10)
+        # Node shader with scene priority 0 so shadow camera priority 1 overrides it
+        self.actor.setShader(application.base.render.getShader(), 0)
         # Already correct scale (1.10m normalized)
         self.actor.setScale(1)
         # Provisional orientation; coordinator checks final orientation

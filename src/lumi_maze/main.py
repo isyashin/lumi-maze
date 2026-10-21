@@ -20,6 +20,7 @@ from ursina import (
 from .core import generate_level, Maze, Cell
 from .rules import RunState
 from .avatar import Fox, prepare_avatar_rendering
+from panda3d.core import RenderState, TransparencyAttrib, AlphaTestAttrib, ColorScaleAttrib, DepthWriteAttrib
 from .world import WorldView, CELL_SIZE
 from .ui import GameUI
 
@@ -62,6 +63,13 @@ HEADING_MAP = {
     (0, 1): 0.0,    # +Z (north)
     (0, -1): 180.0, # -Z (south)
 }
+
+
+def _camera_aim_at_target(cam: Entity, target_local_pos: Vec3) -> None:
+    pitch = math.degrees(math.atan2(cam.position.y, -cam.position.z))
+    cam.rotation_x = pitch
+    cam.rotation_y = 0.0
+    cam.rotation_z = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +147,12 @@ class Game(Entity):
             shadow_map_resolution=Vec2(2048, 2048),
         )
         self.sun.color = color.rgb32(255, 236, 198)
+        # Register shadow camera tag states
+        self.sun._light.setTagStateKey("lumi_shadow")
+        solid_state = RenderState.makeEmpty().addAttrib(TransparencyAttrib.make(TransparencyAttrib.MNone), 100).addAttrib(AlphaTestAttrib.make(AlphaTestAttrib.MAlways, 0.0), 100).addAttrib(DepthWriteAttrib.make(DepthWriteAttrib.MOn), 100)
+        masked_state = RenderState.makeEmpty().addAttrib(TransparencyAttrib.make(TransparencyAttrib.MNone), 100).addAttrib(DepthWriteAttrib.make(DepthWriteAttrib.MOn), 100).addAttrib(ColorScaleAttrib.makeOff(), 101)
+        self.sun._light.setTagState('solid', solid_state)
+        self.sun._light.setTagState('masked', masked_state)
         # Light defaults overwrite the constructor rotation, so set it again.
         self.sun.rotation = (42, -35, 0)
         # Soft cool-blue ambient fill keeps the fox readable in shade.
@@ -147,9 +161,11 @@ class Game(Entity):
         # Camera follows cam_target
         camera.parent = self.cam_target
         camera.position = CAMERA_OFFSET
-        camera.look_at(self.cam_target.position)
+        _camera_aim_at_target(camera, self.cam_target.position)
         camera.rotation_z = 0
         camera.fov = CAMERA_FOV
+        camera.clip_plane_near = 0.5
+        camera.clip_plane_far = 250
 
     def input(self, key: str) -> None:
         """Handle key press events via Ursina's entity input system."""
@@ -300,10 +316,8 @@ class Game(Entity):
         # Better third-person pose: offset from cam_target, looking slightly down and ahead
         camera.position = CAMERA_OFFSET
         camera.fov = CAMERA_FOV
-        # Since camera is parented to cam_target, look_at uses world coordinates
-        if self.cam_target:
-            camera.look_at(self.cam_target.position)
-        camera.rotation_z = 0
+        # Absolute orientation: camera parent is cam_target, target is at local origin
+        _camera_aim_at_target(camera, Vec3(0, 0, 0))
         self.cam_overview_active = False
 
     def _start_overview(self) -> None:
@@ -333,11 +347,6 @@ class Game(Entity):
         )
         self.cam_target.position = self.cam_target_pos
 
-        if self.world_view:
-            self.world_view.update_visibility(
-                camera.world_position, self.fox.world_position, dt
-            )
-
         if self.cam_overview_active:
             self.cam_overview_timer += dt
 
@@ -357,8 +366,7 @@ class Game(Entity):
                     self.cam_overview_start_pos.y + (overview_height - self.cam_overview_start_pos.y) * eased,
                     self.cam_overview_start_pos.z + (0 - self.cam_overview_start_pos.z) * eased
                 )
-                camera.look_at(self.cam_target.position)
-                camera.rotation_z = 0
+                _camera_aim_at_target(camera, Vec3(0, 0, 0))
 
                 if t >= 1.0:
                     self.cam_overview_phase = 1
@@ -367,8 +375,7 @@ class Game(Entity):
             elif self.cam_overview_phase == 1:  # Hold high
                 hold_duration = OVERVIEW_HOLD_TIME
                 camera.position = Vec3(0, overview_height, 0)
-                camera.look_at(self.cam_target.position)
-                camera.rotation_z = 0
+                _camera_aim_at_target(camera, Vec3(0, 0, 0))
 
                 if self.cam_overview_timer >= hold_duration:
                     self.cam_overview_phase = 2
@@ -384,8 +391,7 @@ class Game(Entity):
                     overview_height + (self.cam_overview_start_pos.y - overview_height) * eased,
                     0 + (self.cam_overview_start_pos.z - 0) * eased
                 )
-                camera.look_at(self.cam_target.position)
-                camera.rotation_z = 0
+                _camera_aim_at_target(camera, Vec3(0, 0, 0))
 
                 if t >= 1.0:
                     self.cam_overview_active = False
@@ -393,10 +399,27 @@ class Game(Entity):
                     camera.position = self.cam_overview_start_pos
                     camera.rotation_x = self.cam_overview_start_rot.x
                     camera.rotation_y = self.cam_overview_start_rot.y
-                    # Re-establish look_at for normal follow
-                    camera.look_at(self.cam_target.position)
-                    camera.rotation_z = 0
+                    camera.rotation_z = self.cam_overview_start_rot.z
+            # After final camera transform (including overview), update visibility
+            # using airborne actor world position
+            if self.world_view:
+                airborne_fox_pos = self.fox.world_position + Vec3(0, self.fox.actor.getY(), 0)
+                self.world_view.update_visibility(
+                    camera.world_position, airborne_fox_pos, dt
+                )
             return
+
+        # Normal follow: camera position is fixed relative to cam_target (CAMERA_OFFSET)
+        # Orientation is already set by _reset_camera; no per-frame look_at needed.
+        # But ensure orientation is correct in case of any drift.
+        _camera_aim_at_target(camera, Vec3(0, 0, 0))
+
+        # Update visibility after camera transform, using airborne actor position
+        if self.world_view:
+            airborne_fox_pos = self.fox.world_position + Vec3(0, self.fox.actor.getY(), 0)
+            self.world_view.update_visibility(
+                camera.world_position, airborne_fox_pos, dt
+            )
 
     # -----------------------------------------------------------------------
     # Movement & Input

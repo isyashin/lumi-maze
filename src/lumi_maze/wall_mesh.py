@@ -6,7 +6,7 @@ body/cap/plinth Entity for each segment:
 * a textured body batch (hard normals, baked UVs, per-vertex tint), and
 * an untextured trim batch holding the cap and plinth cubes.
 
-Walls that occlude the fox become semi-transparent (alpha-to-coverage MMultisample)
+Walls that occlude the fox become semi-transparent (dual-pass alpha blending)
 and return to opaque when the sightline clears. No vertex positions are modified.
 """
 
@@ -319,8 +319,9 @@ class WallBatch:
             texture=self.wall_texture,
             color=color.white,
         )
-        body_entity.setShader(shader, 10)
-        body_entity.setTransparency(TransparencyAttrib.MMultisample, TRANSPARENCY_PRIORITY)
+        body_entity.setShader(shader, 0)
+        body_entity.setTag('lumi_shadow','solid')
+        body_entity.setTransparency(TransparencyAttrib.MDual, TRANSPARENCY_PRIORITY)
         # Keep the rendered Mesh so GeomVertexRewriter edits the visible data.
         self.body = body_entity.model
         self._body_entity = body_entity
@@ -338,8 +339,9 @@ class WallBatch:
             model=trim_mesh,
             color=color.white,
         )
-        trim_entity.setShader(shader, 10)
-        trim_entity.setTransparency(TransparencyAttrib.MMultisample, TRANSPARENCY_PRIORITY)
+        trim_entity.setShader(shader, 0)
+        trim_entity.setTag('lumi_shadow','solid')
+        trim_entity.setTransparency(TransparencyAttrib.MDual, TRANSPARENCY_PRIORITY)
         self.trim = trim_entity.model
         self._trim_entity = trim_entity
 

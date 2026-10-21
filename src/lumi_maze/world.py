@@ -135,7 +135,7 @@ class WorldView:
     @staticmethod
     def _pbr(entity: Entity) -> Entity:
         """Use the scene PBR shader on primitive surfaces so light works."""
-        entity.setShader(application.base.render.getShader(), 10)
+        entity.setShader(application.base.render.getShader(), 0)
         return entity
 
     def _build_ground(self) -> None:
@@ -472,14 +472,15 @@ class WorldView:
         for node in self._scenery_nodes:
             if node.isEmpty():
                 continue
+            node.setTag('lumi_shadow','masked')
             try:
                 # Get tight bounds in root space
                 bmin, bmax = node.getTightBounds(self.root)
                 self._scenery_bounds.append((node, bmin, bmax))
                 # Cache original render state for exact restoration
                 self._scenery_orig_states.append((node, node.getState()))
-                # Ensure transparency is set up for alpha-to-coverage
-                node.setTransparency(TransparencyAttrib.MMultisample, 20)
+                # Ensure transparency is set up for dual-pass alpha blending
+                node.setTransparency(TransparencyAttrib.MDual, 20)
             except Exception:
                 # Skip nodes that can't provide bounds
                 continue
@@ -609,9 +610,9 @@ class WorldView:
                         _ray_hits_aabb(cam_pos, chest_target, bmin_exp, bmax_exp)
 
             if occluding:
-                # Semi-transparent: set color scale alpha ~0.22, keep MMultisample
+                # Semi-transparent: set color scale alpha ~0.22, use MDual
                 node.setColorScale(1, 1, 1, 0.22, 100)  # priority 100 overrides
-                node.setTransparency(TransparencyAttrib.MMultisample, 20)
+                node.setTransparency(TransparencyAttrib.MDual, 20)
             else:
                 # Restore exact original RenderState (including any glTF transparency/alpha mode)
                 orig_state = self._scenery_orig_states[idx][1] if idx < len(self._scenery_orig_states) else None
@@ -619,7 +620,7 @@ class WorldView:
                     node.setState(orig_state)
                 else:
                     node.clearColorScale()
-                    node.setTransparency(TransparencyAttrib.MMultisample, 20)
+                    node.setTransparency(TransparencyAttrib.MDual, 20)
 
     def update(self, dt: float) -> None:
         """Bob and rotate pickups; the exit arch remains static."""

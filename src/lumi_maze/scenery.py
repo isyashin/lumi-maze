@@ -70,7 +70,7 @@ def _place_model(root, file_name: str, x: float, ground_y: float, z: float,
         return None
 
     model.reparentTo(root)
-    model.setShader(application.base.render.getShader(), 10)
+    model.setShader(application.base.render.getShader(), 0)
     model.setScale(scale)
     model.setH(heading)
     model.setPos(x, 0, z)
@@ -102,7 +102,7 @@ def place_food_prop(root, fruit):
         Filename.fromOsSpecific(str(FOOD_ASSETS / f"{fruit}.glb"))
     )
     model.reparentTo(root)
-    model.setShader(application.base.render.getShader(), 10)
+    model.setShader(application.base.render.getShader(), 0)
     model.setScale(4.3 if fruit == "apple" else 5.0)
     model.setY(.28)
     return model
