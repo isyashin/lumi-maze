@@ -30,7 +30,7 @@ TRANSPARENCY_PRIORITY = 20  # render state priority for transparency
 RGB = Tuple[int, int, int]
 Vec3f = Tuple[float, float, float]
 
-# Outward normal + four corners, counter-clockwise when seen from outside.
+# Outward normal + four corners; table is right-handed. Ursina y-up-left defaults to clockwise winding, so we emit reversed winding to keep outward normals.
 # Keeping all 24 vertices separate gives hard normals and stable UV seams.
 _FACES = (
     ((1, 0, 0), ((1, -1, -1), (1, 1, -1), (1, 1, 1), (1, -1, 1))),
@@ -150,9 +150,9 @@ def _append_cube(vertices: List[Vec3f], normals: List[Vec3f],
                 i1 = face_verts[gy * 4 + gx + 1]
                 i2 = face_verts[(gy + 1) * 4 + gx + 1]
                 i3 = face_verts[(gy + 1) * 4 + gx]
-                # Two triangles per quad, CCW from outside (same as original)
-                triangles.append((i0, i1, i2))
-                triangles.append((i0, i2, i3))
+                # Ursina uses y-up-left with clockwise default winding; reverse to maintain outward normal.
+                triangles.append((i0, i2, i1))
+                triangles.append((i0, i3, i2))
 
     return base, orig_colors
 
