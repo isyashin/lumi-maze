@@ -48,6 +48,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 
 Персонаж Fox — Pxltiger, CC BY 4.0; источник, изменения и полный кредит в [CREDITS.txt](CREDITS.txt) и [ASSETS.md](docs/ASSETS.md). Оригиналы выбранных FBX/PNG хранятся в `art-source/pxltiger`, готовый GLB уже включён в игру. Окружение, фрукты и покрытия используют перечисленные там лицензии CC0/CC BY. Для обычного запуска Blender не нужен.
 
+Тексты лицензий библиотек Windows-сборки сохранены в [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES/README.md) и включены в архив игры.
+
 Проверка полёта/прозрачности в настоящем окне: `$env:PYTHONPATH="src"; .\.venv\Scripts\python.exe tools/qa_feedback.py`. Проверка смены уровней: `tools/qa_lifecycle.py`. Результаты первой пишутся в `.tmp/feedback-qa`. Всего 33 pytest-теста: 21 правило/генерация, 9 проверок формата текстур, 3 проверки скруглённой геометрии.
 
 Регрессия камеры и ходьбы: `tools/qa_render_stability.py --out .tmp/stability --assert-stable --level 7`. Регрессия настоящей прозрачности без MSAA и неизменности теней: `tools/qa_transparency.py --out .tmp/shadows --assert-blended --assert-shadows --scenery`. Перед ними также задайте `PYTHONPATH=src`. [Диагностика и приёмка LUM-054–057](docs/tasks/LUM-054-057-render-stability.md).

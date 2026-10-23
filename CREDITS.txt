@@ -12,3 +12,5 @@ https://quaternius.itch.io/stylized-nature-megakit
 https://opengameart.org/content/handpainted-grass-texture-pack
 Каменные и песчаные покрытия: MELLE и PamNawi, OpenGameArt, выбран вариант CC0; исходные ссылки находятся в документации проекта ASSETS.md.
 Меню: рендер этой игры. Карта освещения: сгенерирована tools/bake_environment.py.
+
+Библиотеки Windows-сборки: Python, Panda3D, Ursina, Pillow, panda3d-gltf и panda3d-simplepbr. Загрузчик собран PyInstaller. Полные тексты лицензий и Bootloader Exception — THIRD_PARTY_LICENSES рядом с exe; дополнительные уведомления сохранены в _internal.
