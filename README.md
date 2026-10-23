@@ -2,6 +2,14 @@
 
 Трёхмерная игра для Windows. Лисёнок Луми ищет выход из семи процедурных лабиринтов: от небольших каменных руин до леса, пещеры и ручьёв. В новой версии — текстурированный мультяшный лисёнок Pxltiger, высокая камера и полупрозрачные препятствия. Есть режим на время и Easy без отсчёта. Каждый уровень имеет свой лабиринт, а повтор попытки сохраняет его планировку.
 
+![Луми и лабиринты — игровой кадр](docs/images/gameplay.png)
+
+## Скачать для Windows
+
+**[Скачать LumiMaze-Windows-x64.zip](https://github.com/isyashin/lumi-maze/releases/latest/download/LumiMaze-Windows-x64.zip)** · [Все релизы и контрольные суммы](https://github.com/isyashin/lumi-maze/releases)
+
+Распакуйте архив целиком и запустите `LumiMaze/LumiMaze.exe`. Python устанавливать не нужно. Сохраняйте папку `_internal` рядом с exe: в ней движок, библиотеки и игровые ассеты. Сборка проверена на Windows 11 x64. Интернет во время игры не нужен.
+
 ## Запуск готовой игры
 
 Последняя проверенная сборка в этой рабочей папке: `dist-footing\LumiMaze\LumiMaze.exe` (23.10.2026, исправлены просвечивание пола и полосы у плинтусов; сохранены исправления камеры, прозрачности и теней). Для переноса на другой компьютер копируйте **всю папку** `dist-footing\LumiMaze`, включая каталог `_internal`. Интернет во время игры не нужен.
@@ -34,11 +42,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 
 `build.ps1` использует локальное виртуальное окружение и собирает папку `dist\LumiMaze`. Для текущего каталога сборки используйте `.\build.ps1 -OutputDir dist-footing`. Для снимка окна: `.\.venv\Scripts\python.exe run_game.py --smoke screenshots\preview.png`. Готовый `.exe` тоже принимает `--smoke`.
 
-Требования и подробные правила — [docs/PRODUCT.md](docs/PRODUCT.md), устройство модулей — [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), происхождение готовых моделей и текстур — [docs/ASSETS.md](docs/ASSETS.md). Это отдельный Git-репозиторий внутри рабочего пространства GPT-техдира.
+Требования и подробные правила — [docs/PRODUCT.md](docs/PRODUCT.md), устройство модулей — [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), происхождение готовых моделей и текстур — [docs/ASSETS.md](docs/ASSETS.md).
 
 ## Графика и проверка
 
-Персонаж Fox — Pxltiger, CC BY 4.0; источник, изменения и полный кредит в [CREDITS.txt](CREDITS.txt) и [ASSETS.md](docs/ASSETS.md). Оригиналы выбранных FBX/PNG хранятся в `art-source/pxltiger`, готовый GLB уже включён в игру. Для обычного запуска Blender не нужен.
+Персонаж Fox — Pxltiger, CC BY 4.0; источник, изменения и полный кредит в [CREDITS.txt](CREDITS.txt) и [ASSETS.md](docs/ASSETS.md). Оригиналы выбранных FBX/PNG хранятся в `art-source/pxltiger`, готовый GLB уже включён в игру. Окружение, фрукты и покрытия используют перечисленные там лицензии CC0/CC BY. Для обычного запуска Blender не нужен.
 
 Проверка полёта/прозрачности в настоящем окне: `$env:PYTHONPATH="src"; .\.venv\Scripts\python.exe tools/qa_feedback.py`. Проверка смены уровней: `tools/qa_lifecycle.py`. Результаты первой пишутся в `.tmp/feedback-qa`. Всего 33 pytest-теста: 21 правило/генерация, 9 проверок формата текстур, 3 проверки скруглённой геометрии.
 
